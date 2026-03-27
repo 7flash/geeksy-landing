@@ -8,7 +8,7 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#problem">Problem</a>
               <a href="#market">GKSY</a>
-              <a href="#holders">holders</a>
+              <a href="#gravity">gravity</a>
               <a href="#jsx-ai">jsx-ai</a>
               <a href="#agent">smart-agent</a>
               <a href="#geeksy">geeksy</a>
@@ -51,10 +51,10 @@ export default function LandingPage() {
         <div id="market-root" />
       </section>
 
-      <section className="section" id="holders">
-        <div className="section-label">On-Chain Distribution</div>
-        <h2>Top GKSY Holders</h2>
-        <p className="section-desc">This leaderboard uses real Solana account data for the GKSY mint, resolving the largest token accounts to their owner wallets through the Helius RPC configured in Geeksy&apos;s pumpfun setup.</p>
+      <section className="section" id="gravity">
+        <div className="section-label">Live Gravity System</div>
+        <h2>GKSY Gravity Leaderboard</h2>
+        <p className="section-desc">This is not just a balance snapshot. Every minute, each wallet earns gravity points equal to the USD value of its current GKSY balance. The leaderboard ranks wallets by accumulated gravity over time, using real holder balances from Helius and live price data from Dexscreener.</p>
         <div id="holders-root" />
       </section>
 

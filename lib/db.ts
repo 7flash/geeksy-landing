@@ -19,7 +19,7 @@ export type HolderRow = {
 }
 
 export function shortWallet(wallet: string) {
-  return `${wallet.slice(0, 4)}…${wallet.slice(-4)}`
+  return `${wallet.slice(0, 4)}...${wallet.slice(-4)}`
 }
 
 export function estimateTokenPriceUsd() {
