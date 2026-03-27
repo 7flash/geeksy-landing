@@ -1,130 +1,18 @@
-import { db, estimateTokenPriceUsd, shortWallet } from '../lib/db'
-
-function formatPoints(pts: number): string {
-  if (pts >= 1_000_000) return (pts / 1_000_000).toFixed(2) + 'M'
-  if (pts >= 1_000) return (pts / 1_000).toFixed(2) + 'K'
-  return pts.toFixed(2)
-}
-
-function formatCurrency(amount: number): string {
-  if (amount >= 1_000_000) return '$' + (amount / 1_000_000).toFixed(2) + 'M'
-  if (amount >= 1_000) return '$' + (amount / 1_000).toFixed(2) + 'K'
-  return '$' + amount.toFixed(2)
-}
-
-function formatNumber(num: number): string {
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(2) + 'M'
-  if (num >= 1_000) return (num / 1_000).toFixed(2) + 'K'
-  return num.toFixed(2)
-}
-
-function formatStreak(minutes: number): string {
-  if (minutes >= 1440) return Math.floor(minutes / 1440) + 'd ' + Math.floor((minutes % 1440) / 60) + 'h'
-  if (minutes >= 60) return Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'
-  return minutes + 'm'
-}
-
-function rankBadge(rank: number): string {
-  if (rank === 1) return '🥇'
-  if (rank === 2) return '🥈'
-  if (rank === 3) return '🥉'
-  return `#${rank}`
-}
-
-function getLandingData() {
-  const tokenPriceUsd = estimateTokenPriceUsd()
-  const holders = db.query(`SELECT wallet, balance FROM holder_snapshots ORDER BY balance DESC LIMIT 10`).all() as Array<{ wallet: string; balance: number }>
-  const gravity = db.query(`SELECT wallet, points, streak_minutes FROM gravity_points ORDER BY points DESC LIMIT 10`).all() as Array<{ wallet: string; points: number; streak_minutes: number }>
-  const holderStats = db.query(`SELECT COUNT(*) as totalHolders, COALESCE(SUM(balance),0) as totalTokens, COALESCE(MAX(updated_at),0) as lastUpdated FROM holder_snapshots`).get() as { totalHolders: number; totalTokens: number; lastUpdated: number }
-  const gravityStats = db.query(`SELECT COUNT(*) as totalHolders, COALESCE(SUM(points),0) as totalPoints, COALESCE(MAX(last_credited_at),0) as lastUpdated FROM gravity_points`).get() as { totalHolders: number; totalPoints: number; lastUpdated: number }
-  const top10Total = holders.reduce((sum, row) => sum + row.balance, 0)
-  return { tokenPriceUsd, holders, gravity, holderStats, gravityStats, top10Percentage: holderStats.totalTokens > 0 ? (top10Total / holderStats.totalTokens) * 100 : 0 }
-}
-
 export default function LandingPage() {
-  const data = getLandingData()
-
   return (
     <>
-      <section className="holders-section" id="holders">
-        <div className="holders-container">
-          <div className="holders-header">
-            <div className="holders-title-row">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="holders-icon">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                <circle cx="9" cy="7" r="4"></circle>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-              </svg>
-              <h2>Holders Leaderboard</h2>
-              <span className="holders-badge">LIVE</span>
-            </div>
-            <p className="holders-subtitle">Real-time view of $GEEKSY token distribution. The top holders drive the ecosystem forward.</p>
-          </div>
-
-          <div className="holders-content">
-            <div className="holders-stats-row">
-              <div className="holders-stat"><span className="holders-stat-value">{data.holderStats.totalHolders}</span><span className="holders-stat-label">Total Holders</span></div>
-              <div className="holders-stat"><span className="holders-stat-value">{formatNumber(data.holderStats.totalTokens)}</span><span className="holders-stat-label">Total Tokens</span></div>
-              <div className="holders-stat"><span className="holders-stat-value">{data.top10Percentage.toFixed(2)}%</span><span className="holders-stat-label">Top 10 %</span></div>
-              <div className="holders-stat"><span className="holders-stat-value holders-live-dot">● LIVE</span><span className="holders-stat-label">Snapshot</span></div>
-            </div>
-            <div className="holders-table">
-              <div className="holders-header-row"><span className="holders-col-rank">Rank</span><span className="holders-col-wallet">Wallet</span><span className="holders-col-balance">Tokens</span><span className="holders-col-usd">USD Value</span></div>
-              {data.holders.map((entry, i) => (
-                <div className={`holders-row ${i < 3 ? 'holders-row-top' : ''}`} key={entry.wallet}>
-                  <span className="holders-col-rank">{rankBadge(i + 1)}</span>
-                  <span className="holders-col-wallet"><a href={`https://solscan.io/account/${entry.wallet}`} target="_blank" rel="noopener">{shortWallet(entry.wallet)}</a></span>
-                  <span className="holders-col-balance">{formatNumber(entry.balance)}</span>
-                  <span className="holders-col-usd">{formatCurrency(entry.balance * data.tokenPriceUsd)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="gravity-banner" id="gravity">
-        <div className="gravity-inner">
-          <div className="gravity-header">
-            <div className="gravity-title-row">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="gravity-icon">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-              <h2>Gravity Leaderboard</h2>
-              <span className="gravity-badge">LIVE</span>
-            </div>
-            <p className="gravity-subtitle">Hold $GEEKSY and earn gravity points every minute — 1 point per $1 held. <strong>Only diamond hands qualify</strong>: your balance must stay unchanged between ticks.</p>
-          </div>
-
-          <div className="lb-content">
-            <div className="lb-stats-row">
-              <div className="lb-stat"><span className="lb-stat-value">{data.gravityStats.totalHolders}</span><span className="lb-stat-label">Holders</span></div>
-              <div className="lb-stat"><span className="lb-stat-value">{formatPoints(data.gravityStats.totalPoints)}</span><span className="lb-stat-label">Total Points</span></div>
-              <div className="lb-stat"><span className="lb-stat-value lb-live-dot">● LIVE</span><span className="lb-stat-label">Snapshot</span></div>
-            </div>
-            <div className="lb-table">
-              <div className="lb-header-row"><span className="lb-col-rank">Rank</span><span className="lb-col-wallet">Wallet</span><span className="lb-col-points">Gravity Points</span><span className="lb-col-streak">Hold Streak</span></div>
-              {data.gravity.map((entry, i) => (
-                <div className={`lb-row ${i < 3 ? 'lb-row-top' : ''}`} key={entry.wallet}>
-                  <span className="lb-col-rank">{rankBadge(i + 1)}</span>
-                  <span className="lb-col-wallet"><a href={`https://solscan.io/account/${entry.wallet}`} target="_blank" rel="noopener">{shortWallet(entry.wallet)}</a></span>
-                  <span className="lb-col-points">{formatPoints(entry.points)}</span>
-                  <span className="lb-col-streak">{formatStreak(entry.streak_minutes)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       <main className="landing-shell">
         <div className="landing">
           <nav className="nav nav-marketing">
             <div className="nav-brand"><div className="logo">G</div><span className="brand-name">Geeksy</span></div>
             <div className="nav-links">
-              <a href="#problem">Problem</a><a href="#jsx-ai">jsx-ai</a><a href="#agent">smart-agent</a><a href="#geeksy">geeksy</a><a href="#hardware">hardware</a><a href="#network">network</a>
+              <a href="#problem">Problem</a>
+              <a href="#market">GKSY</a>
+              <a href="#jsx-ai">jsx-ai</a>
+              <a href="#agent">smart-agent</a>
+              <a href="#geeksy">geeksy</a>
+              <a href="#hardware">hardware</a>
+              <a href="#network">network</a>
               <a href="https://github.com/7flash/geeksy" target="_blank" rel="noopener">GitHub</a>
               <a href="https://app.geeksy.xyz" className="btn-primary">Open App →</a>
             </div>
@@ -154,6 +42,13 @@ export default function LandingPage() {
           </section>
         </div>
       </main>
+
+      <section className="section" id="market">
+        <div className="section-label">Live Token Data</div>
+        <h2>GKSY Market Snapshot</h2>
+        <p className="section-desc">Live market data for token <code>9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS</code>, fetched from Dexscreener. This replaces the broken top-of-page token blocks and keeps the landing focused.</p>
+        <div id="market-root" />
+      </section>
 
       <section className="section" id="problem">
         <div className="section-label">The Problem</div>
@@ -220,69 +115,28 @@ export default function LandingPage() {
         <h2>Decentralized Inference Network</h2>
         <p className="section-desc">A mesh network of speakers where inference is free because you own the hardware. No API fees. No subscriptions. No one sees your data.</p>
         <div className="vision-grid">
-          <div>
-            <h3 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>How Weight Sharding Works</h3>
-            <p style={{ color: 'var(--text2)', lineHeight: '1.8', marginBottom: '24px' }}>A 7B parameter model can be split across multiple speakers. Each device loads specific transformer layers and only sees tensor activations — not your words.</p>
-            <div className="math-box">
-              <div className="math-row"><span>1 speaker</span><span>→ 1-3B model</span></div>
-              <div className="math-row"><span>4 speakers</span><span>→ 7B model</span></div>
-              <div className="math-row"><span>10 speakers</span><span>→ 30B model</span></div>
-              <div className="math-row"><span>20 speakers</span><span>→ 70B model</span></div>
-            </div>
-          </div>
-          <div className="vision-diagram">
-            <h3>🌐 Inference Mesh</h3>
-            <div className="vision-nodes">
-              <div className="vision-node active">Speaker A<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 0-7</span></div>
-              <div className="vision-node active">Speaker B<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 8-15</span></div>
-              <div className="vision-node active">Speaker C<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 16-23</span></div>
-              <div className="vision-node active">Speaker D<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 24-31</span></div>
-              <div className="vision-node">Speaker E<br/><span style={{ fontSize: '10px' }}>redundancy</span></div>
-              <div className="vision-node">Speaker F<br/><span style={{ fontSize: '10px' }}>redundancy</span></div>
-            </div>
-            <p style={{ marginTop: '20px', fontSize: '13px', color: 'var(--text2)' }}>7B model · 4 speakers · 0 cloud · ∞ privacy</p>
-          </div>
+          <div><h3 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>How Weight Sharding Works</h3><p style={{ color: 'var(--text2)', lineHeight: '1.8', marginBottom: '24px' }}>A 7B parameter model can be split across multiple speakers. Each device loads specific transformer layers and only sees tensor activations — not your words.</p><div className="math-box"><div className="math-row"><span>1 speaker</span><span>→ 1-3B model</span></div><div className="math-row"><span>4 speakers</span><span>→ 7B model</span></div><div className="math-row"><span>10 speakers</span><span>→ 30B model</span></div><div className="math-row"><span>20 speakers</span><span>→ 70B model</span></div></div></div>
+          <div className="vision-diagram"><h3>🌐 Inference Mesh</h3><div className="vision-nodes"><div className="vision-node active">Speaker A<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 0-7</span></div><div className="vision-node active">Speaker B<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 8-15</span></div><div className="vision-node active">Speaker C<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 16-23</span></div><div className="vision-node active">Speaker D<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 24-31</span></div><div className="vision-node">Speaker E<br/><span style={{ fontSize: '10px' }}>redundancy</span></div><div className="vision-node">Speaker F<br/><span style={{ fontSize: '10px' }}>redundancy</span></div></div><p style={{ marginTop: '20px', fontSize: '13px', color: 'var(--text2)' }}>7B model · 4 speakers · 0 cloud · ∞ privacy</p></div>
         </div>
       </section>
 
       <section className="section" id="compare">
         <div className="section-label">Full Comparison</div>
         <h2>How We Compare</h2>
-        <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Feature</th><th>ChatGPT / Claude.ai</th><th>Pi Agent / Claude Code</th><th>OpenClaw / Open WebUI</th><th className="highlight-col">Geeksy Stack</th></tr></thead><tbody>
-          <tr><td>Data Privacy</td><td className="bad">❌ Cloud-stored</td><td className="bad">❌ Cloud API calls</td><td className="ok">⚠️ Self-hosted option</td><td className="good">✅ Local-only SQLite</td></tr>
-          <tr><td>Cost</td><td className="bad">$20-200/mo</td><td className="bad">$20-100/mo API</td><td className="ok">Free + API costs</td><td className="good">✅ Free (BYO API key or local LLM)</td></tr>
-          <tr><td>Autonomous Execution</td><td className="bad">❌ Chat only</td><td className="bad">❌ Approval per step</td><td className="bad">❌ Chat only</td><td className="good">✅ Objective-driven loop</td></tr>
-          <tr><td>Background Tasks</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="good">✅ Heartbeat + cron</td></tr>
-          <tr><td>Mobile Access</td><td className="ok">App (cloud)</td><td className="bad">❌ Terminal only</td><td className="bad">❌ Desktop browser</td><td className="good">✅ Telegram bot + Web</td></tr>
-        </tbody></table></div>
+        <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Feature</th><th>ChatGPT / Claude.ai</th><th>Pi Agent / Claude Code</th><th>OpenClaw / Open WebUI</th><th className="highlight-col">Geeksy Stack</th></tr></thead><tbody><tr><td>Data Privacy</td><td className="bad">❌ Cloud-stored</td><td className="bad">❌ Cloud API calls</td><td className="ok">⚠️ Self-hosted option</td><td className="good">✅ Local-only SQLite</td></tr><tr><td>Cost</td><td className="bad">$20-200/mo</td><td className="bad">$20-100/mo API</td><td className="ok">Free + API costs</td><td className="good">✅ Free (BYO API key or local LLM)</td></tr><tr><td>Autonomous Execution</td><td className="bad">❌ Chat only</td><td className="bad">❌ Approval per step</td><td className="bad">❌ Chat only</td><td className="good">✅ Objective-driven loop</td></tr><tr><td>Background Tasks</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="good">✅ Heartbeat + cron</td></tr><tr><td>Mobile Access</td><td className="ok">App (cloud)</td><td className="bad">❌ Terminal only</td><td className="bad">❌ Desktop browser</td><td className="good">✅ Telegram bot + Web</td></tr></tbody></table></div>
       </section>
 
       <section className="section" id="waterfall">
         <div className="section-label">Architecture</div>
         <h2>Async Agents Waterfall Model</h2>
         <p className="section-desc">Our smart-agent framework uses an asynchronous waterfall model that allows multiple agents to work on different aspects of a problem simultaneously, then converge their results for optimal outcomes.</p>
-        <div className="waterfall-diagram">
-          <div className="waterfall-stage"><div className="stage-header"><span className="stage-number">1</span><h3>Problem Analysis</h3></div><p>Analyzes requirements, constraints, and success criteria</p><div className="agent-tag">Analyzer Agent</div></div>
-          <div className="waterfall-arrow">↓</div>
-          <div className="waterfall-stage"><div className="stage-header"><span className="stage-number">2</span><h3>Research & Planning</h3></div><p>Gathers information, explores solutions, creates execution plan</p><div className="agent-tags"><div className="agent-tag">Research Agent</div><div className="agent-tag">Planner Agent</div></div></div>
-          <div className="waterfall-arrow">↓</div>
-          <div className="parallel-stages">
-            <div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Implementation</h3></div><p>Executes the planned solution with multiple specialized agents</p><div className="agent-tags"><div className="agent-tag">Coder Agent</div><div className="agent-tag">Tester Agent</div><div className="agent-tag">Reviewer Agent</div></div></div>
-            <div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Validation</h3></div><p>Verifies correctness, performance, and compliance</p><div className="agent-tags"><div className="agent-tag">Validator Agent</div><div className="agent-tag">Security Agent</div></div></div>
-          </div>
-          <div className="waterfall-arrow">↓</div>
-          <div className="waterfall-stage final"><div className="stage-header"><span className="stage-number">5</span><h3>Verification</h3></div><p>Final validation against original objectives and requirements</p><div className="agent-tag">Quality Agent</div></div>
-        </div>
+        <div className="waterfall-diagram"><div className="waterfall-stage"><div className="stage-header"><span className="stage-number">1</span><h3>Problem Analysis</h3></div><p>Analyzes requirements, constraints, and success criteria</p><div className="agent-tag">Analyzer Agent</div></div><div className="waterfall-arrow">↓</div><div className="waterfall-stage"><div className="stage-header"><span className="stage-number">2</span><h3>Research & Planning</h3></div><p>Gathers information, explores solutions, creates execution plan</p><div className="agent-tags"><div className="agent-tag">Research Agent</div><div className="agent-tag">Planner Agent</div></div></div><div className="waterfall-arrow">↓</div><div className="parallel-stages"><div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Implementation</h3></div><p>Executes the planned solution with multiple specialized agents</p><div className="agent-tags"><div className="agent-tag">Coder Agent</div><div className="agent-tag">Tester Agent</div><div className="agent-tag">Reviewer Agent</div></div></div><div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Validation</h3></div><p>Verifies correctness, performance, and compliance</p><div className="agent-tags"><div className="agent-tag">Validator Agent</div><div className="agent-tag">Security Agent</div></div></div></div><div className="waterfall-arrow">↓</div><div className="waterfall-stage final"><div className="stage-header"><span className="stage-number">5</span><h3>Verification</h3></div><p>Final validation against original objectives and requirements</p><div className="agent-tag">Quality Agent</div></div></div>
       </section>
 
       <section className="section" id="start">
         <div className="section-label">Get Started</div>
         <h2>Try It Right Now</h2>
-        <div className="start-grid">
-          <div className="start-card"><h3>jsx-ai</h3><p>Composable prompts for any LLM</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install jsx-ai</pre></div><a href="https://www.npmjs.com/package/jsx-ai" className="start-link">npm →</a></div>
-          <div className="start-card"><h3>smart-agent</h3><p>Autonomous agent with objectives</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install smart-agent-ai</pre></div><a href="https://www.npmjs.com/package/smart-agent-ai" className="start-link">npm →</a></div>
-          <div className="start-card"><h3>geeksy</h3><p>Local-first AI assistant</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npx geeksy</pre></div><a href="https://www.npmjs.com/package/geeksy" className="start-link">npm →</a></div>
-        </div>
+        <div className="start-grid"><div className="start-card"><h3>jsx-ai</h3><p>Composable prompts for any LLM</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install jsx-ai</pre></div><a href="https://www.npmjs.com/package/jsx-ai" className="start-link">npm →</a></div><div className="start-card"><h3>smart-agent</h3><p>Autonomous agent with objectives</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install smart-agent-ai</pre></div><a href="https://www.npmjs.com/package/smart-agent-ai" className="start-link">npm →</a></div><div className="start-card"><h3>geeksy</h3><p>Local-first AI assistant</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npx geeksy</pre></div><a href="https://www.npmjs.com/package/geeksy" className="start-link">npm →</a></div></div>
       </section>
 
       <footer className="footer"><div className="footer-links"><a href="https://github.com/7flash">GitHub</a><a href="https://www.npmjs.com/package/jsx-ai">jsx-ai</a><a href="https://www.npmjs.com/package/smart-agent-ai">smart-agent</a><a href="https://www.npmjs.com/package/geeksy">geeksy</a></div><p>Built with Melina.js · Every layer open source · © 2026 geeksy.xyz</p></footer>
