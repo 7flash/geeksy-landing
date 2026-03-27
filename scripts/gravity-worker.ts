@@ -4,7 +4,7 @@ import { db, dbPath } from '../lib/db'
 import { fetchMarketSnapshot, fetchOwnerBalances, TOKEN_MINT } from '../lib/gksy'
 
 const TICK_MS = 60_000
-const SCORING_VERSION = 'gksy-gravity-v1'
+const SCORING_VERSION = 'gksy-gravity-v3'
 
 function ensureSchema() {
   mkdirSync(path.dirname(dbPath), { recursive: true })

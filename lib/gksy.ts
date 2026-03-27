@@ -4,6 +4,10 @@ import path from 'path'
 export const TOKEN_MINT = '9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS'
 const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 
+export const EXCLUDED_GRAVITY_WALLETS = new Set([
+  'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM', // LP
+])
+
 export type OwnerBalanceRow = {
   owner: string
   balance: number
@@ -122,6 +126,7 @@ export async function fetchOwnerBalances() {
   }
 
   const holders: OwnerBalanceRow[] = Array.from(balances.entries())
+    .filter(([owner]) => !EXCLUDED_GRAVITY_WALLETS.has(owner))
     .map(([owner, value]) => ({
       owner,
       balance: value.balance,
