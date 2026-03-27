@@ -2,13 +2,13 @@ export default function LandingPage() {
   return (
     <>
       <main className="landing-shell">
-        <div className="landing">
+        <div className="landing landing-wide">
           <nav className="nav nav-marketing">
             <div className="nav-brand"><div className="logo">G</div><span className="brand-name">Geeksy</span></div>
             <div className="nav-links">
-              <a href="#problem">Problem</a>
+              <a href="#gravity-story">Gravity</a>
               <a href="#market">GKSY</a>
-              <a href="#gravity">gravity</a>
+              <a href="#problem">Problem</a>
               <a href="#jsx-ai">jsx-ai</a>
               <a href="#agent">smart-agent</a>
               <a href="#geeksy">geeksy</a>
@@ -19,27 +19,22 @@ export default function LandingPage() {
             </div>
           </nav>
 
-          <section className="hero hero-chat">
-            <div className="hero-badge">Open Source · Self-Hosted · Free</div>
-            <h1>Your AI that actually<br /><span className="gradient-text">does things</span></h1>
-            <p className="hero-sub">Chat with an AI that writes code, runs scripts, schedules tasks, searches the web, and manages your automation — all from one interface.</p>
-            <div className="hero-actions">
-              <a href="https://app.geeksy.xyz" className="btn-hero">Open App</a>
-              <div className="install-cmd"><code>npx geeksy</code><button id="copy-install-btn" className="copy-btn" title="Copy">📋</button></div>
-            </div>
-          </section>
-
-          <section className="demo">
-            <div className="terminal">
-              <div className="terminal-bar"><span className="dot red"></span><span className="dot yellow"></span><span className="dot green"></span><span className="terminal-title">Geeksy Chat</span></div>
-              <div className="terminal-body">
-                <div className="chat-line user"><span className="role">You</span><span>Give me a motivational quote every morning at 9am</span></div>
-                <div className="chat-line agent"><span className="role">Geeksy</span><span>I&apos;ll set that up! Creating a script and scheduling it...</span></div>
-                <div className="chat-line tool"><span className="tool-badge">✏️ write_file</span><span>scripts/morning-quote.ts</span><span className="tool-status">✓ done</span></div>
-                <div className="chat-line tool"><span className="tool-badge">⏰ schedule</span><span>cron: &quot;0 9 * * *&quot;</span><span className="tool-status">✓ scheduled</span></div>
-                <div className="chat-line agent"><span className="role">Geeksy</span><span>Done! You&apos;ll get a random motivational quote every morning at 9am. ☀️</span></div>
+          <section className="hero gravity-hero" id="gravity-story">
+            <div className="gravity-hero-copy">
+              <div className="hero-badge">Cosmic Gravity · Wallet-Native · Live</div>
+              <h1>Own GKSY.<br /><span className="gradient-text">Accumulate gravity.</span></h1>
+              <p className="hero-sub">Gravity score follows one simple rule: <code>gravity += current GKSY balance × current USD price</code> every minute. Connect Phantom, see where you rank, and spin the cosmic wheel weighted by real gravity.</p>
+              <div className="gravity-hero-actions">
+                <button className="btn-hero" id="hero-connect-wallet-btn">Connect Phantom</button>
+                <button className="wheel-secondary-btn" id="hero-spin-wheel-btn">Spin the Wheel</button>
+              </div>
+              <div className="gravity-formula-card">
+                <div className="market-card-label">How gravity accrues</div>
+                <div className="gravity-formula">gravity += balance × priceUsd</div>
+                <p>Updated every minute from live GKSY holder balances and current market price.</p>
               </div>
             </div>
+            <div className="gravity-hero-panel" id="gravity-hero-root" />
           </section>
         </div>
       </main>
@@ -47,15 +42,8 @@ export default function LandingPage() {
       <section className="section" id="market">
         <div className="section-label">Live Token Data</div>
         <h2>GKSY Market Snapshot</h2>
-        <p className="section-desc">Live market data for token <code>9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS</code>, fetched from Dexscreener. Real holder data below is fetched from Helius-backed Solana RPC.</p>
+        <p className="section-desc">Track the current token price, market activity, and the gravity leaderboard side by side. The dashboard above is the live entry point; everything below explains the larger Geeksy world around it.</p>
         <div id="market-root" />
-      </section>
-
-      <section className="section" id="gravity">
-        <div className="section-label">Live Gravity System</div>
-        <h2>GKSY Gravity Leaderboard</h2>
-        <p className="section-desc">Gravity score follows a simple formula: <code>gravity += current GKSY balance × current USD price</code> every minute. The leaderboard ranks wallets by accumulated gravity over time, while excluding known LP/infrastructure wallets.</p>
-        <div id="holders-root" />
       </section>
 
       <section className="section" id="problem">

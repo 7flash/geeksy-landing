@@ -24,6 +24,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 
 .landing-shell { min-height:100vh; background:radial-gradient(circle at top, rgba(99,102,241,.12), transparent 35%), radial-gradient(circle at 80% 20%, rgba(192,132,252,.08), transparent 25%), var(--bg); }
 .landing { width:min(960px, calc(100% - 48px)); margin:0 auto; }
+.landing-wide { width:min(1320px, calc(100% - 48px)); }
 .nav { display:flex; align-items:center; justify-content:space-between; padding:20px 0; border-bottom:1px solid #1e1e2e; }
 .nav-brand { display:flex; align-items:center; gap:10px; font-weight:800; font-size:20px; color:var(--text); }
 .logo { width:36px; height:36px; background:var(--accent); border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px; color:#fff; }
@@ -34,6 +35,27 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .btn-primary { background:var(--accent); color:#fff !important; padding:8px 18px; border-radius:8px; font-weight:500; font-size:14px; transition:background .2s; display:inline-block; }
 .btn-primary:hover { background:#4f46e5; }
 .hero { text-align:center; padding:80px 0 60px; }
+.gravity-hero { display:grid; grid-template-columns:minmax(0, 1fr) minmax(540px, 620px); gap:32px; align-items:start; text-align:left; padding:72px 0 90px; }
+.gravity-hero-copy { padding-top:18px; }
+.gravity-hero-actions { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:22px; }
+.gravity-formula-card { background:linear-gradient(135deg, rgba(99,102,241,.12), rgba(6,182,212,.08)); border:1px solid rgba(129,140,248,.28); border-radius:18px; padding:22px; max-width:580px; box-shadow:0 18px 50px rgba(0,0,0,.22); }
+.gravity-formula { font-size:clamp(22px, 3vw, 32px); font-weight:800; letter-spacing:-.03em; margin-bottom:8px; color:var(--text); }
+.gravity-formula-card p { color:var(--text2); font-size:14px; }
+.gravity-hero-panel { min-height:620px; }
+.gravity-dashboard-card { background:linear-gradient(180deg, rgba(12,12,26,.94), rgba(8,8,18,.98)); border:1px solid rgba(129,140,248,.24); border-radius:28px; padding:22px; box-shadow:0 30px 90px rgba(0,0,0,.42); position:relative; overflow:hidden; }
+.cosmic-dashboard-card::before { content:''; position:absolute; inset:-20% auto auto -10%; width:260px; height:260px; background:radial-gradient(circle, rgba(129,140,248,.18), transparent 68%); pointer-events:none; }
+.cosmic-dashboard-card::after { content:''; position:absolute; inset:auto -8% -18% auto; width:280px; height:280px; background:radial-gradient(circle, rgba(236,72,153,.12), transparent 65%); pointer-events:none; }
+.gravity-dashboard-header, .gravity-dashboard-subline, .wallet-summary-grid, .gravity-hero-table-wrap { position:relative; z-index:1; }
+.gravity-dashboard-header { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; }
+.gravity-dashboard-header h3 { font-size:28px; }
+.gravity-wallet-state { color:var(--text2); font-size:13px; }
+.wallet-summary-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; margin-bottom:18px; }
+.wallet-summary-card { background:rgba(17,17,40,.82); border:1px solid rgba(129,140,248,.18); border-radius:18px; padding:18px; }
+.wallet-summary-value { font-size:28px; font-weight:800; color:var(--text); margin-bottom:6px; }
+.wallet-summary-card p { color:var(--text2); font-size:12px; line-height:1.5; }
+.gravity-dashboard-subline { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:16px; color:var(--text2); font-size:13px; }
+.gravity-hero-table-wrap { max-height:540px; overflow:auto; border:1px solid rgba(129,140,248,.14); border-radius:18px; }
+.active-wallet-row td { background:rgba(99,102,241,.10) !important; }
 .hero-badge { display:inline-block; background:#1e1e2e; border:1px solid #2e2e3e; padding:6px 16px; border-radius:20px; font-size:13px; color:#a1a1aa; margin-bottom:24px; }
 .hero h1 { font-size:clamp(36px,6vw,56px); font-weight:700; line-height:1.15; color:#f4f4f5; margin-bottom:20px; }
 .gradient-text { background:linear-gradient(135deg,#818cf8,#c084fc,#f472b6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
@@ -167,21 +189,29 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .wheel-legend-row { display:grid; grid-template-columns:18px 1fr auto auto; gap:10px; align-items:center; padding:10px 12px; background:rgba(12,12,26,.82); border:1px solid var(--border); border-radius:12px; font-size:13px; }
 .wheel-color { width:12px; height:12px; border-radius:999px; display:inline-block; }
 
+@media (max-width: 1100px) {
+  .gravity-hero { grid-template-columns:1fr; }
+  .gravity-hero-panel { min-height:auto; }
+}
 @media (max-width: 900px) {
-  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta { grid-template-columns:1fr; }
+  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta,.wallet-summary-grid { grid-template-columns:1fr; }
   .nav-links { flex-wrap:wrap; gap:12px; justify-content:flex-end; }
   .market-card-primary { grid-column:auto; }
-  .market-token-row,.gravity-toolbar { flex-direction:column; align-items:flex-start; }
+  .market-token-row,.gravity-toolbar,.gravity-dashboard-subline { flex-direction:column; align-items:flex-start; }
 }
 @media (max-width: 640px) {
-  .landing { width:min(960px, calc(100% - 32px)); }
+  .landing, .landing-wide { width:min(1320px, calc(100% - 32px)); }
   .nav-links a:not(.btn-primary) { display:none; }
   .hero { padding:48px 0 40px; }
-  .hero-actions { flex-direction:column; }
+  .gravity-hero { padding:48px 0 56px; }
+  .hero-actions, .gravity-hero-actions { flex-direction:column; }
   .install-cmd { width:100%; justify-content:center; }
   .chat-line.tool { padding-left:20px; }
   .wheel-modal { padding:20px; border-radius:18px; }
   .wheel-half-mask { height:220px; }
   .wheel-disc { width:440px; height:440px; }
   .wheel-legend-row { grid-template-columns:18px 1fr; }
+  .gravity-dashboard-card { padding:16px; border-radius:20px; }
+  .gravity-dashboard-header h3 { font-size:22px; }
+  .wallet-summary-value { font-size:22px; }
 }
