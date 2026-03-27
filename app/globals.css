@@ -132,12 +132,30 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .holders-table td { background:var(--surface); padding:14px 18px; border-top:1px solid rgba(255,255,255,.04); color:var(--text); font-size:14px; }
 .holders-table td code { font-size:13px; }
 .holders-footnote { color:var(--text2); font-size:13px; }
+.gravity-toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; background:linear-gradient(135deg, rgba(99,102,241,.12), rgba(236,72,153,.08)); border:1px solid rgba(129,140,248,.35); border-radius:16px; padding:20px 22px; }
+.gravity-toolbar-copy { color:var(--text2); font-size:14px; max-width:700px; }
+.wheel-modal-backdrop { position:fixed; inset:0; background:rgba(3,4,12,.76); backdrop-filter:blur(10px); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000; }
+.wheel-modal { width:min(980px, 100%); max-height:min(90vh, 920px); overflow:auto; background:linear-gradient(180deg, rgba(17,17,40,.98), rgba(8,8,18,.98)); border:1px solid rgba(129,140,248,.28); border-radius:24px; padding:28px; position:relative; box-shadow:0 30px 100px rgba(0,0,0,.5); }
+.wheel-close { position:absolute; right:16px; top:16px; width:40px; height:40px; border-radius:999px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:24px; cursor:pointer; }
+.wheel-modal-copy h3 { font-size:34px; margin-bottom:10px; }
+.wheel-modal-copy p { color:var(--text2); max-width:720px; }
+.wheel-stage { margin:28px 0 20px; position:relative; display:flex; justify-content:center; }
+.wheel-half-mask { width:min(640px, 100%); height:320px; overflow:hidden; position:relative; }
+.wheel-disc { width:640px; height:640px; border-radius:50%; border:10px solid rgba(255,255,255,.08); box-shadow:0 20px 80px rgba(0,0,0,.45); margin:0 auto; transform-origin:center center; }
+.wheel-pointer { position:absolute; top:-4px; left:50%; transform:translateX(-50%); width:0; height:0; border-left:18px solid transparent; border-right:18px solid transparent; border-top:28px solid #fff; filter:drop-shadow(0 8px 18px rgba(0,0,0,.4)); z-index:2; }
+.wheel-actions { display:flex; gap:12px; align-items:center; justify-content:center; margin-bottom:18px; flex-wrap:wrap; }
+.wheel-secondary-btn { background:transparent; color:var(--text); border:1px solid var(--border); padding:14px 22px; border-radius:10px; font-weight:600; cursor:pointer; }
+.wheel-result { background:rgba(99,102,241,.08); border:1px solid rgba(129,140,248,.3); border-radius:16px; padding:20px; margin:0 auto 18px; max-width:460px; text-align:center; }
+.wheel-result-wallet { font-size:24px; font-weight:800; margin:6px 0 10px; }
+.wheel-legend { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.wheel-legend-row { display:grid; grid-template-columns:18px 1fr auto auto; gap:10px; align-items:center; padding:10px 12px; background:var(--surface); border:1px solid var(--border); border-radius:12px; font-size:13px; }
+.wheel-color { width:12px; height:12px; border-radius:999px; display:inline-block; }
 
 @media (max-width: 900px) {
-  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid { grid-template-columns:1fr; }
+  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta { grid-template-columns:1fr; }
   .nav-links { flex-wrap:wrap; gap:12px; justify-content:flex-end; }
   .market-card-primary { grid-column:auto; }
-  .market-token-row { flex-direction:column; align-items:flex-start; }
+  .market-token-row,.gravity-toolbar { flex-direction:column; align-items:flex-start; }
 }
 @media (max-width: 640px) {
   .landing { width:min(960px, calc(100% - 32px)); }
@@ -146,4 +164,8 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
   .hero-actions { flex-direction:column; }
   .install-cmd { width:100%; justify-content:center; }
   .chat-line.tool { padding-left:20px; }
+  .wheel-modal { padding:20px; border-radius:18px; }
+  .wheel-half-mask { height:220px; }
+  .wheel-disc { width:440px; height:440px; }
+  .wheel-legend-row { grid-template-columns:18px 1fr; }
 }
