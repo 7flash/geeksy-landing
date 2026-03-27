@@ -54,7 +54,7 @@ export default function LandingPage() {
       <section className="section" id="gravity">
         <div className="section-label">Live Gravity System</div>
         <h2>GKSY Gravity Leaderboard</h2>
-        <p className="section-desc">This is not just a balance snapshot. Every minute, each wallet earns gravity points equal to the USD value of its current GKSY balance. The leaderboard ranks wallets by accumulated gravity over time, using real holder balances from Helius and live price data from Dexscreener, while excluding known LP/infrastructure wallets.</p>
+        <p className="section-desc">Gravity score follows a simple formula: <code>gravity += current GKSY balance × current USD price</code> every minute. The leaderboard ranks wallets by accumulated gravity over time, while excluding known LP/infrastructure wallets.</p>
         <div id="holders-root" />
       </section>
 

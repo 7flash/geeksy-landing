@@ -55,6 +55,7 @@ type WheelState = {
 }
 
 const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6', '#a855f7', '#f97316', '#10b981', '#3b82f6']
+const DEFAULT_VISIBLE_HOLDERS = 20
 
 function fmtUsd(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
@@ -63,9 +64,13 @@ function fmtUsd(n: number) {
   return `$${n.toFixed(6)}`
 }
 
-function fmtPct(n: number) {
+function fmtMarketPct(n: number) {
   const sign = n > 0 ? '+' : ''
   return `${sign}${n.toFixed(2)}%`
+}
+
+function fmtProbability(n: number) {
+  return `${n.toFixed(2)}%`
 }
 
 function fmtTokenAmount(n: number) {
@@ -81,8 +86,13 @@ function fmtPoints(n: number) {
   return n.toFixed(2)
 }
 
-function pct(n: number, total: number) {
-  return total > 0 ? (n / total) * 100 : 0
+function shortWinnerWallet(wallet: string, leaderboard: LeaderboardRow[]) {
+  return leaderboard.find((row) => row.wallet === wallet)?.walletShort || wallet
+}
+
+function percentOf(row: LeaderboardRow, rows: LeaderboardRow[]) {
+  const total = rows.reduce((sum, item) => sum + item.points, 0)
+  return total > 0 ? (row.points / total) * 100 : 0
 }
 
 function buildWheelSegments(rows: LeaderboardRow[]) {
@@ -112,10 +122,10 @@ function chooseWeightedWinner(rows: LeaderboardRow[]) {
   let roll = Math.random() * total
   for (const row of rows) {
     roll -= row.points
-    if (roll <= 0) return { row, probability: row.points / total }
+    if (roll <= 0) return { row, probability: (row.points / total) * 100 }
   }
   const last = rows[rows.length - 1]
-  return { row: last, probability: last ? last.points / total : 0 }
+  return { row: last, probability: last ? (last.points / total) * 100 : 0 }
 }
 
 function buildWheelGradient(rows: LeaderboardRow[]) {
@@ -154,11 +164,11 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
           <a href={p.url} target="_blank" rel="noopener" className="btn-primary">View on Dexscreener</a>
         </div>
       </div>
-      <div className="market-card"><div className="market-card-label">Price</div><div className="market-big">{fmtUsd(p.priceUsd)}</div><div className={`market-change ${p.changeH24 >= 0 ? 'pos' : 'neg'}`}>24h {fmtPct(p.changeH24)}</div></div>
+      <div className="market-card"><div className="market-card-label">Price</div><div className="market-big">{fmtUsd(p.priceUsd)}</div><div className={`market-change ${p.changeH24 >= 0 ? 'pos' : 'neg'}`}>24h {fmtMarketPct(p.changeH24)}</div></div>
       <div className="market-card"><div className="market-card-label">Liquidity</div><div className="market-big">{fmtUsd(p.liquidityUsd)}</div><div className="market-muted">DEX: {p.dexId}</div></div>
       <div className="market-card"><div className="market-card-label">FDV</div><div className="market-big">{fmtUsd(p.fdv)}</div><div className="market-muted">Market cap {fmtUsd(p.marketCap)}</div></div>
       <div className="market-card"><div className="market-card-label">24h Volume</div><div className="market-big">{fmtUsd(p.volume24h)}</div><div className="market-muted">Buys {p.buys24h} · Sells {p.sells24h}</div></div>
-      <div className="market-card"><div className="market-card-label">Momentum</div><div className="market-mini-grid"><span className={p.changeM5 >= 0 ? 'pos' : 'neg'}>5m {fmtPct(p.changeM5)}</span><span className={p.changeH1 >= 0 ? 'pos' : 'neg'}>1h {fmtPct(p.changeH1)}</span><span className={p.changeH6 >= 0 ? 'pos' : 'neg'}>6h {fmtPct(p.changeH6)}</span><span className={p.changeH24 >= 0 ? 'pos' : 'neg'}>24h {fmtPct(p.changeH24)}</span></div></div>
+      <div className="market-card"><div className="market-card-label">Momentum</div><div className="market-mini-grid"><span className={p.changeM5 >= 0 ? 'pos' : 'neg'}>5m {fmtMarketPct(p.changeM5)}</span><span className={p.changeH1 >= 0 ? 'pos' : 'neg'}>1h {fmtMarketPct(p.changeH1)}</span><span className={p.changeH6 >= 0 ? 'pos' : 'neg'}>6h {fmtMarketPct(p.changeH6)}</span><span className={p.changeH24 >= 0 ? 'pos' : 'neg'}>24h {fmtMarketPct(p.changeH24)}</span></div></div>
     </div>
   )
 }
@@ -166,35 +176,34 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
 function WheelModal({
   rows,
   state,
-  onClose,
-  onSpin,
 }: {
   rows: LeaderboardRow[]
   state: WheelState
-  onClose: () => void
-  onSpin: () => void
 }) {
   const wheelRows = rows.slice(0, 12)
   const gradient = buildWheelGradient(wheelRows)
-  const total = wheelRows.reduce((sum, row) => sum + row.points, 0)
 
   return (
     <div className="wheel-modal-backdrop" id="wheel-backdrop">
-      <div className="wheel-modal" role="dialog" aria-modal="true" aria-labelledby="wheel-title">
+      <div className="wheel-modal cosmic-wheel-modal" role="dialog" aria-modal="true" aria-labelledby="wheel-title">
+        <div className="cosmic-stars" />
         <button className="wheel-close" id="wheel-close-btn" aria-label="Close">×</button>
         <div className="wheel-modal-copy">
-          <div className="section-label">Weighted by gravity</div>
+          <div className="section-label">Cosmic weighted draw</div>
           <h3 id="wheel-title">Spin the Gravity Wheel</h3>
           <p>
-            The wheel uses the current displayed gravity leaderboard. Each slice size and win chance is proportional to that wallet&apos;s gravity score.
+            Slice size is proportional to gravity score. More gravity means more space on the wheel and a higher chance to win.
           </p>
         </div>
 
-        <div className="wheel-stage">
+        <div className="wheel-stage cosmic-wheel-stage">
+          <div className="wheel-orbit-ring orbit-ring-1" />
+          <div className="wheel-orbit-ring orbit-ring-2" />
           <div className="wheel-pointer" />
-          <div className="wheel-half-mask">
+          <div className="wheel-half-mask cosmic-wheel-mask">
+            <div className="wheel-glow" />
             <div
-              className="wheel-disc"
+              className="wheel-disc cosmic-wheel-disc"
               style={{
                 background: gradient,
                 transform: `rotate(${state.rotationDeg}deg)`,
@@ -205,15 +214,15 @@ function WheelModal({
         </div>
 
         <div className="wheel-actions">
-          <button className="btn-hero" id="spin-wheel-btn" disabled={state.spinning}> {state.spinning ? 'Spinning…' : 'Spin the Wheel'} </button>
+          <button className="btn-hero" id="spin-wheel-btn" disabled={state.spinning}>{state.spinning ? 'Spinning…' : 'Spin the Wheel'}</button>
           <button className="wheel-secondary-btn" id="close-wheel-btn">Close</button>
         </div>
 
         {state.winnerWallet ? (
-          <div className="wheel-result">
+          <div className="wheel-result cosmic-result">
             <div className="market-card-label">Winner</div>
-            <div className="wheel-result-wallet"><code>{rows.find((row) => row.wallet === state.winnerWallet)?.walletShort || state.winnerWallet}</code></div>
-            <p>Win probability: {fmtPct(state.winnerProbability * 100)}</p>
+            <div className="wheel-result-wallet"><code>{shortWinnerWallet(state.winnerWallet, rows)}</code></div>
+            <p>Win probability: {fmtProbability(state.winnerProbability)}</p>
           </div>
         ) : null}
 
@@ -223,7 +232,7 @@ function WheelModal({
               <span className="wheel-color" style={{ background: WHEEL_COLORS[index % WHEEL_COLORS.length] }} />
               <code>{row.walletShort}</code>
               <span>{fmtPoints(row.points)} gravity</span>
-              <span>{pct(row.points, total).toFixed(2)}%</span>
+              <span>{fmtProbability(percentOf(row, wheelRows))}</span>
             </div>
           ))}
         </div>
@@ -235,16 +244,17 @@ function WheelModal({
 function GravityPanel({
   data,
   loading,
-  wheelState,
-  openWheel,
+  expanded,
 }: {
   data: LeaderboardData | null
   loading: boolean
-  wheelState: WheelState
-  openWheel: () => void
+  expanded: boolean
 }) {
   if (loading) return <div className="market-loading">Loading gravity leaderboard…</div>
   if (!data?.leaderboard?.length || !data.stats) return <div className="market-loading">Gravity leaderboard unavailable right now.</div>
+
+  const visibleRows = expanded ? data.leaderboard : data.leaderboard.slice(0, DEFAULT_VISIBLE_HOLDERS)
+  const hasMore = (data.leaderboard?.length || 0) > DEFAULT_VISIBLE_HOLDERS
 
   return (
     <div className="holders-wrap">
@@ -259,8 +269,11 @@ function GravityPanel({
         </div>
       </div>
       <div className="gravity-toolbar">
-        <p className="gravity-toolbar-copy">Want a weighted random winner? Spin a half-wheel where slice size equals gravity score.</p>
-        <button className="btn-hero" id="open-wheel-btn">Spin the Wheel</button>
+        <p className="gravity-toolbar-copy">Weighted random winner picker based on current gravity scores. Top 20 are shown first, and you can expand the full leaderboard below.</p>
+        <div className="gravity-toolbar-actions">
+          <button className="btn-hero" id="open-wheel-btn">Spin the Wheel</button>
+          {hasMore ? <button className="wheel-secondary-btn" id="toggle-holders-btn">{expanded ? 'Show Top 20' : `Show All (${data.leaderboard.length})`}</button> : null}
+        </div>
       </div>
       <div className="holders-table-wrap">
         <table className="holders-table">
@@ -270,26 +283,23 @@ function GravityPanel({
               <th>Wallet</th>
               <th>Gravity</th>
               <th>Balance</th>
-              <th>USD / min</th>
-              <th>Minutes</th>
+              <th>Last Minute</th>
             </tr>
           </thead>
           <tbody>
-            {data.leaderboard.map((row) => (
+            {visibleRows.map((row) => (
               <tr key={row.wallet}>
                 <td>{row.rank}</td>
                 <td><code>{row.walletShort}</code></td>
                 <td>{fmtPoints(row.points)}</td>
                 <td>{fmtTokenAmount(row.balance)}</td>
                 <td>{fmtUsd(row.usdPerMinute)}</td>
-                <td>{row.streakMinutes}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="holders-footnote">{data.scoringRule} Last update: {data.stats.lastUpdated ? new Date(data.stats.lastUpdated).toLocaleString() : 'n/a'}.</p>
-      {wheelState.open ? <div id="wheel-modal-root"><button id="hidden-open-wheel" style={{ display: 'none' }} onClick={openWheel}></button></div> : null}
     </div>
   )
 }
@@ -301,6 +311,7 @@ export default function mount() {
   let marketData: MarketData | null = null
   let gravityLoading = true
   let gravityData: LeaderboardData | null = null
+  let expanded = false
   let wheelState: WheelState = {
     open: false,
     spinning: false,
@@ -327,28 +338,13 @@ export default function mount() {
     }
 
     if (holdersRoot) {
-      const openWheel = () => {
-        wheelState = { ...wheelState, open: true }
-        renderAll()
-      }
-
-      render(
-        <GravityPanel
-          data={gravityData}
-          loading={gravityLoading}
-          wheelState={wheelState}
-          openWheel={openWheel}
-        />,
-        holdersRoot,
-      )
+      render(<GravityPanel data={gravityData} loading={gravityLoading} expanded={expanded} />, holdersRoot)
 
       const openBtn = document.getElementById('open-wheel-btn') as HTMLButtonElement | null
-      if (openBtn) {
-        openBtn.onclick = () => {
-          wheelState = { ...wheelState, open: true }
-          renderAll()
-        }
-      }
+      if (openBtn) openBtn.onclick = () => { wheelState = { ...wheelState, open: true }; renderAll() }
+
+      const toggleBtn = document.getElementById('toggle-holders-btn') as HTMLButtonElement | null
+      if (toggleBtn) toggleBtn.onclick = () => { expanded = !expanded; renderAll() }
     }
 
     if (wheelModalMount) {
@@ -384,10 +380,7 @@ export default function mount() {
           }, 5600)
         }
 
-        render(
-          <WheelModal rows={rows} state={wheelState} onClose={closeWheel} onSpin={spinWheel} />,
-          wheelModalMount,
-        )
+        render(<WheelModal rows={rows} state={wheelState} />, wheelModalMount)
 
         const closeButtons = ['wheel-close-btn', 'close-wheel-btn']
         for (const id of closeButtons) {
@@ -396,11 +389,7 @@ export default function mount() {
         }
 
         const backdrop = document.getElementById('wheel-backdrop')
-        if (backdrop) {
-          backdrop.onclick = (event) => {
-            if (event.target === backdrop) closeWheel()
-          }
-        }
+        if (backdrop) backdrop.onclick = (event) => { if (event.target === backdrop) closeWheel() }
 
         const spinBtn = document.getElementById('spin-wheel-btn') as HTMLButtonElement | null
         if (spinBtn) spinBtn.onclick = spinWheel
@@ -444,7 +433,7 @@ export default function mount() {
 
   const fetchGravity = async () => {
     try {
-      const res = await fetch('/api/leaderboard?limit=12')
+      const res = await fetch('/api/leaderboard?limit=200')
       gravityData = await res.json()
     } catch {
       gravityData = null
