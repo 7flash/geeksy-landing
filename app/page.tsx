@@ -8,6 +8,7 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#problem">Problem</a>
               <a href="#market">GKSY</a>
+              <a href="#holders">holders</a>
               <a href="#jsx-ai">jsx-ai</a>
               <a href="#agent">smart-agent</a>
               <a href="#geeksy">geeksy</a>
@@ -46,8 +47,15 @@ export default function LandingPage() {
       <section className="section" id="market">
         <div className="section-label">Live Token Data</div>
         <h2>GKSY Market Snapshot</h2>
-        <p className="section-desc">Live market data for token <code>9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS</code>, fetched from Dexscreener. This replaces the broken top-of-page token blocks and keeps the landing focused.</p>
+        <p className="section-desc">Live market data for token <code>9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS</code>, fetched from Dexscreener. Real holder data below is fetched from Helius-backed Solana RPC.</p>
         <div id="market-root" />
+      </section>
+
+      <section className="section" id="holders">
+        <div className="section-label">On-Chain Distribution</div>
+        <h2>Top GKSY Holders</h2>
+        <p className="section-desc">This leaderboard uses real Solana account data for the GKSY mint, resolving the largest token accounts to their owner wallets through the Helius RPC configured in Geeksy&apos;s pumpfun setup.</p>
+        <div id="holders-root" />
       </section>
 
       <section className="section" id="problem">

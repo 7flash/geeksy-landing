@@ -122,6 +122,16 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .market-change.pos,.market-mini-grid .pos { color:var(--green); }
 .market-change.neg,.market-mini-grid .neg { color:var(--red); }
 .market-mini-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; font-weight:700; margin-top:8px; }
+.holders-wrap { display:flex; flex-direction:column; gap:16px; }
+.holders-meta { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+.holders-meta-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; }
+.holders-meta-big { font-size:20px; font-weight:800; color:var(--text); word-break:break-all; }
+.holders-table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:16px; }
+.holders-table { width:100%; border-collapse:collapse; min-width:760px; }
+.holders-table th { background:var(--surface2); padding:14px 18px; text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text2); }
+.holders-table td { background:var(--surface); padding:14px 18px; border-top:1px solid rgba(255,255,255,.04); color:var(--text); font-size:14px; }
+.holders-table td code { font-size:13px; }
+.holders-footnote { color:var(--text2); font-size:13px; }
 
 @media (max-width: 900px) {
   .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid { grid-template-columns:1fr; }

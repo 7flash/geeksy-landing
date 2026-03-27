@@ -23,6 +23,22 @@ type MarketData = {
   error?: string
 }
 
+type HoldersData = {
+  ok: boolean
+  mint?: string
+  totalSupply?: number
+  rpcHost?: string
+  fetchedAt?: string
+  holders?: Array<{
+    rank: number
+    owner: string
+    tokenAccount: string
+    amount: number
+    pctOfSupply: number
+  }>
+  error?: string
+}
+
 function fmtUsd(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
   if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`
@@ -33,6 +49,17 @@ function fmtUsd(n: number) {
 function fmtPct(n: number) {
   const sign = n > 0 ? '+' : ''
   return `${sign}${n.toFixed(2)}%`
+}
+
+function fmtTokenAmount(n: number) {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`
+  return n.toFixed(2)
+}
+
+function shortAddress(s: string) {
+  return `${s.slice(0, 6)}…${s.slice(-6)}`
 }
 
 function MarketPanel({ data, loading }: { data: MarketData | null; loading: boolean }) {
@@ -56,6 +83,51 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
       <div className="market-card"><div className="market-card-label">FDV</div><div className="market-big">{fmtUsd(p.fdv)}</div><div className="market-muted">Market cap {fmtUsd(p.marketCap)}</div></div>
       <div className="market-card"><div className="market-card-label">24h Volume</div><div className="market-big">{fmtUsd(p.volume24h)}</div><div className="market-muted">Buys {p.buys24h} · Sells {p.sells24h}</div></div>
       <div className="market-card"><div className="market-card-label">Momentum</div><div className="market-mini-grid"><span className={p.changeM5 >= 0 ? 'pos' : 'neg'}>5m {fmtPct(p.changeM5)}</span><span className={p.changeH1 >= 0 ? 'pos' : 'neg'}>1h {fmtPct(p.changeH1)}</span><span className={p.changeH6 >= 0 ? 'pos' : 'neg'}>6h {fmtPct(p.changeH6)}</span><span className={p.changeH24 >= 0 ? 'pos' : 'neg'}>24h {fmtPct(p.changeH24)}</span></div></div>
+    </div>
+  )
+}
+
+function HoldersPanel({ data, loading }: { data: HoldersData | null; loading: boolean }) {
+  if (loading) return <div className="market-loading">Loading real holder data…</div>
+  if (!data?.ok || !data.holders?.length) return <div className="market-loading">{data?.error || 'Holder data unavailable right now.'}</div>
+
+  return (
+    <div className="holders-wrap">
+      <div className="holders-meta">
+        <div className="holders-meta-card">
+          <div className="market-card-label">RPC</div>
+          <div className="holders-meta-big">{data.rpcHost || 'unknown'}</div>
+        </div>
+        <div className="holders-meta-card">
+          <div className="market-card-label">Supply</div>
+          <div className="holders-meta-big">{fmtTokenAmount(data.totalSupply || 0)}</div>
+        </div>
+      </div>
+      <div className="holders-table-wrap">
+        <table className="holders-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Owner Wallet</th>
+              <th>Amount</th>
+              <th>% Supply</th>
+              <th>Token Account</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.holders.slice(0, 12).map((holder) => (
+              <tr key={holder.tokenAccount}>
+                <td>{holder.rank}</td>
+                <td><code>{shortAddress(holder.owner)}</code></td>
+                <td>{fmtTokenAmount(holder.amount)}</td>
+                <td>{holder.pctOfSupply.toFixed(2)}%</td>
+                <td><code>{shortAddress(holder.tokenAccount)}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="holders-footnote">Largest token accounts are resolved to owner wallets via Solana RPC. Refreshed every 60s.</p>
     </div>
   )
 }
@@ -104,6 +176,28 @@ export default function mount() {
     fetchData()
     const interval = setInterval(fetchData, 30_000)
     cleanups.push(() => { clearInterval(interval); render(null, marketRoot) })
+  }
+
+  const holdersRoot = document.getElementById('holders-root')
+  if (holdersRoot) {
+    let loading = true
+    let data: HoldersData | null = null
+    const update = () => render(<HoldersPanel data={data} loading={loading} />, holdersRoot)
+    const fetchData = async () => {
+      try {
+        const res = await fetch('/api/holders')
+        data = await res.json()
+      } catch {
+        data = { ok: false, error: 'Failed to fetch holder data' }
+      } finally {
+        loading = false
+        update()
+      }
+    }
+    update()
+    fetchData()
+    const interval = setInterval(fetchData, 60_000)
+    cleanups.push(() => { clearInterval(interval); render(null, holdersRoot) })
   }
 
   return () => cleanups.forEach((fn) => fn())
