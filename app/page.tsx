@@ -1,6 +1,23 @@
+import { Head } from 'melina/server'
+
 export default function LandingPage() {
   return (
     <>
+      <Head>
+        <title>Geeksy — Your AI that actually does things</title>
+        <meta name="description" content="Self-hosted AI assistant that writes code, runs scripts, schedules tasks, searches the web, and manages your automation — all from one interface." />
+        <meta property="og:title" content="Geeksy — Your AI that actually does things" />
+        <meta property="og:description" content="Self-hosted AI assistant with autonomous execution. Chat → Code → Schedule → Deploy." />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://geeksy.xyz" />
+        <meta property="og:image" content="https://geeksy.xyz/api/og/spin/default" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Geeksy — Your AI that actually does things" />
+        <meta name="twitter:description" content="Self-hosted AI assistant with autonomous execution. Chat → Code → Schedule → Deploy." />
+        <meta name="twitter:image" content="https://geeksy.xyz/api/og/spin/default" />
+      </Head>
       <main className="landing-shell">
         <div className="landing landing-wide">
           <nav className="nav nav-marketing">

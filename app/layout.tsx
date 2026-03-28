@@ -4,13 +4,6 @@ export default function RootLayout({ children }: { children: any }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Geeksy — Your AI that actually does things</title>
-        <meta name="description" content="Self-hosted AI assistant that writes code, runs scripts, schedules tasks, searches the web, and manages your automation — all from one interface." />
-        <meta property="og:title" content="Geeksy — Your AI that actually does things" />
-        <meta property="og:description" content="Self-hosted AI assistant with autonomous execution. Chat → Code → Schedule → Deploy." />
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content="https://geeksy.xyz" />
-        <meta name="twitter:card" content="summary_large_image" />
         <meta name="theme-color" content="#6366f1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

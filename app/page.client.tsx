@@ -169,9 +169,7 @@ function getRewardRotation(tiers: RewardTier[], tierId: string, currentRotation:
   return currentRotation + 1440 + delta
 }
 function buildSpinPermalink(spinId: string) {
-  const url = new URL(window.location.href)
-  url.searchParams.set('spin', spinId)
-  return url.toString()
+  return `${window.location.origin}/spin/${spinId}`
 }
 function buildSpinShareText(spin: SpinRow) {
   const wallet = shortWallet(spin.wallet) || 'a GKSY holder'
