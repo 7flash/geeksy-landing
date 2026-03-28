@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun run server.ts",
-    "start": "bun run server.ts"
+    "start": "bun run server.ts",
+    "payout:worker": "bun run scripts/payout-worker.ts"
   },
   "dependencies": {
     "melina": "^2.3.1"
