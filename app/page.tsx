@@ -39,10 +39,27 @@ export default function LandingPage() {
         </div>
       </main>
 
-      <section className="section" id="market">
-        <div className="section-label">Live Token Data</div>
-        <h2>GKSY Market Snapshot</h2>
-        <p className="section-desc">Track the current token price, market activity, and the gravity leaderboard side by side. The dashboard above is the live entry point; everything below explains the larger Geeksy world around it.</p>
+      <section className="section section-bridge" id="market">
+        <div className="section-label">From gravity to product</div>
+        <h2>The gravity game is the front door.<br />Geeksy is the universe behind it.</h2>
+        <p className="section-desc">Gravity turns holding into participation. But Geeksy itself is much bigger: a local-first AI system, autonomous agent runtime, composable LLM toolkit, and eventually a hardware + decentralized inference ecosystem. This section bridges the token mechanic with the product stack below.</p>
+        <div className="bridge-grid">
+          <div className="bridge-card bridge-card-primary">
+            <div className="market-card-label">What visitors should understand first</div>
+            <h3>Own GKSY → earn gravity → spin for treasury rewards</h3>
+            <p>The top section is the interactive product moment: connect wallet, see your gravity, and eventually spend that gravity through an on-chain spin flow.</p>
+          </div>
+          <div className="bridge-card">
+            <div className="market-card-label">What Geeksy actually is</div>
+            <h3>AI operating layer</h3>
+            <p>Geeksy is a local-first assistant that writes code, runs scripts, schedules tasks, and connects together the rest of the stack.</p>
+          </div>
+          <div className="bridge-card">
+            <div className="market-card-label">Underlying libraries</div>
+            <h3>jsx-ai + smart-agent</h3>
+            <p>The stack is powered by reusable infrastructure: composable prompt components, autonomous execution loops, and observable tool pipelines.</p>
+          </div>
+        </div>
         <div id="market-root" />
       </section>
 
@@ -57,6 +74,18 @@ export default function LandingPage() {
           <div className="problem-card"><div className="problem-icon">⚡</div><h3>Rate Limits & Downtime</h3><p>Hit your cap during a critical task? Too bad. The AI you pay for decides when you&apos;ve had enough.</p></div>
         </div>
         <div className="solution-banner"><h3>Our answer: build every layer yourself.</h3><p>Five open-source layers. From the JSX prompt interface down to custom PCB hardware. Each layer works standalone. Together, they&apos;re a complete AI stack that runs on your terms.</p></div>
+      </section>
+
+      <section className="section section-stack-intro" id="stack-intro">
+        <div className="section-label">The Stack</div>
+        <h2>A cosmic stack built in layers</h2>
+        <p className="section-desc">If gravity is the game surface, the stack below is the engine room. Each layer can stand on its own, but together they form the larger Geeksy universe: prompts, agents, personal AI, hardware, and decentralized inference.</p>
+        <div className="stack-pillars">
+          <div className="stack-pillar"><span>01</span><div><h3>Interface</h3><p>jsx-ai turns prompts into reusable components.</p></div></div>
+          <div className="stack-pillar"><span>02</span><div><h3>Execution</h3><p>smart-agent runs goals until they are actually done.</p></div></div>
+          <div className="stack-pillar"><span>03</span><div><h3>Ownership</h3><p>geeksy keeps your workflows, data, and automation on your side.</p></div></div>
+          <div className="stack-pillar"><span>04</span><div><h3>Embodiment</h3><p>Custom hardware and inference networks extend the system into the physical world.</p></div></div>
+        </div>
       </section>
 
       <section className="section" id="jsx-ai">
