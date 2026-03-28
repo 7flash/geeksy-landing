@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run server.ts",
     "start": "bun run server.ts",
-    "payout:worker": "bun run scripts/payout-worker.ts"
+    "payout:worker": "bun run scripts/payout-worker.ts",
+    "treasury:snapshot": "bun run scripts/treasury-snapshot.ts"
   },
   "dependencies": {
     "melina": "^2.3.1"
