@@ -4,6 +4,27 @@ import path from 'path'
 export const dbPath = path.resolve(process.cwd(), 'gravity.db')
 export const db = new Database(dbPath)
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS holder_snapshots (
+    wallet TEXT PRIMARY KEY,
+    balance REAL NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS gravity_points (
+    wallet TEXT PRIMARY KEY,
+    points REAL NOT NULL DEFAULT 0,
+    streak_minutes INTEGER NOT NULL DEFAULT 0,
+    last_credited_at INTEGER NOT NULL DEFAULT 0,
+    first_seen_at INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS gravity_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+`)
+
 export type GravityRow = {
   wallet: string
   points: number
