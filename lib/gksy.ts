@@ -8,8 +8,70 @@ export const EXCLUDED_GRAVITY_WALLETS = new Set([
   'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM', // LP
 ])
 
-export const KNOWN_WALLET_LABELS: Record<string, string> = {
+const BUILTIN_WALLET_LABELS: Record<string, string> = {
   'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM': 'GKSY LP',
+}
+
+function isWalletLike(value: string | undefined | null) {
+  const v = (value || '').trim()
+  return !!v && v.length >= 32
+}
+
+function getKnownWalletsPath() {
+  const cwd = process.cwd()
+  const candidates = [
+    process.env.KNOWN_WALLETS_PATH,
+    path.resolve(cwd, 'known-wallets.json'),
+    path.resolve(cwd, 'known-wallets.local.json'),
+    '/opt/geeksy-landing/known-wallets.json',
+  ].filter(Boolean) as string[]
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) || null
+}
+
+function loadFileWalletLabels() {
+  const file = getKnownWalletsPath()
+  if (!file) return {}
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, string>
+    return Object.fromEntries(
+      Object.entries(raw || {}).filter(([wallet, label]) => isWalletLike(wallet) && typeof label === 'string' && label.trim()),
+    )
+  } catch {
+    return {}
+  }
+}
+
+function loadEnvWalletLabels() {
+  const labels: Record<string, string> = {}
+
+  const add = (wallet: string | undefined, label: string) => {
+    const value = (wallet || '').trim()
+    if (isWalletLike(value)) labels[value] = label
+  }
+
+  add(process.env.TREASURY_WALLET, 'Geeksy Treasury')
+  add(process.env.GKSY_TREASURY_WALLET, 'GKSY Treasury')
+  add(process.env.GKSY_TEAM_WALLET, 'Geeksy Team')
+  add(process.env.GKSY_BONDING_CURVE_WALLET, 'Bonding Curve')
+  add(process.env.GKSY_EXCHANGE_WALLET, 'Exchange Wallet')
+
+  for (const [key, value] of Object.entries(process.env)) {
+    const match = key.match(/^KNOWN_WALLET_(.+)$/)
+    if (!match) continue
+    const label = match[1]!.replace(/_/g, ' ').trim()
+    add(value, label)
+  }
+
+  return labels
+}
+
+export function getKnownWalletLabels() {
+  return {
+    ...BUILTIN_WALLET_LABELS,
+    ...loadFileWalletLabels(),
+    ...loadEnvWalletLabels(),
+  }
 }
 
 export function shortWalletLabel(wallet: string) {
@@ -17,7 +79,7 @@ export function shortWalletLabel(wallet: string) {
 }
 
 export function getWalletLabel(wallet: string) {
-  return KNOWN_WALLET_LABELS[wallet] || null
+  return getKnownWalletLabels()[wallet] || null
 }
 
 export function getWalletDisplay(wallet: string) {
