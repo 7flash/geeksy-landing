@@ -71,6 +71,8 @@ type WalletSummaryData = {
   spendable: number
   pendingClaims: number
   claimableAmount: number
+  requestedClaims: number
+  requestedAmount: number
   wheelSpendAmount: number
   rewardToken: string
   rewardTiers: RewardTier[]
@@ -78,6 +80,15 @@ type WalletSummaryData = {
     id: string
     tierId: string
     rewardAmount: number
+    createdAt: number
+  } | null
+  latestClaimRequest?: {
+    id: string
+    amount: number
+    token: string
+    claimCount: number
+    status: string
+    processedAt: number | null
     createdAt: number
   } | null
   error?: string
@@ -98,6 +109,28 @@ type SpinsData = {
   ok: boolean
   spins?: SpinRow[]
   spin?: SpinRow | null
+  error?: string
+}
+
+type ClaimRow = {
+  id: string
+  spinId: string
+  wallet: string
+  amount: number
+  token: string
+  status: string
+  txSignature: string | null
+  requestId: string | null
+  requestedAt: number | null
+  createdAt: number
+  updatedAt: number
+  tierId: string | null
+  rewardBps: number | null
+}
+
+type ClaimsData = {
+  ok: boolean
+  claims?: ClaimRow[]
   error?: string
 }
 
@@ -209,13 +242,23 @@ function SpinsPanel({ title, spins, empty }: { title: string; spins: SpinRow[]; 
   </div>
 }
 
-function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, mySpins, expanded }: {
+function ClaimsPanel({ claims, wallet, loading }: { claims: ClaimRow[]; wallet: string | null; loading: boolean }) {
+  return <div className="spins-card claims-card">
+    <div className="spins-card-header"><div className="market-card-label">Claim History</div><h4>Your Claims</h4></div>
+    {loading ? <p className="spins-empty">Loading claim history…</p> : !wallet ? <p className="spins-empty">Connect Phantom to load your claim history.</p> : !claims.length ? <p className="spins-empty">No claim records yet. Spin the wheel to earn treasury rewards.</p> : <div className="spins-list">{claims.map((claim) => <div className="spin-row" key={claim.id}><div><div className="spin-tier">{claim.tierId ? claim.tierId.toUpperCase() : 'CLAIM'}</div><div className="spin-meta">{new Date((claim.requestedAt || claim.createdAt)).toLocaleString()} · {claim.status}</div></div><div className="spin-reward"><strong>{fmtPoints(claim.amount)} {claim.token}</strong><span>{claim.rewardBps != null ? rewardPctLabel(claim.rewardBps) : 'Treasury reward'}</span></div></div>)}</div>}
+  </div>
+}
+
+function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, mySpins, claims, claimsLoading, claimSubmitting, expanded }: {
   rows: LeaderboardRow[]
   wallet: string | null
   summary: WalletSummaryData | null
   featuredSpin: SpinRow | null
   recentSpins: SpinRow[]
   mySpins: SpinRow[]
+  claims: ClaimRow[]
+  claimsLoading: boolean
+  claimSubmitting: boolean
   expanded: boolean
 }) {
   const visibleRows = expanded ? rows : rows.slice(0, DEFAULT_VISIBLE_HOLDERS)
@@ -228,7 +271,7 @@ function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, my
       <div className="wallet-summary-card"><div className="market-card-label">Your Gravity</div><div className="wallet-summary-value">{fmtPoints(summary?.totalEarned || 0)}</div><p>{myRow ? `Rank #${myRow.rank}` : wallet ? 'Wallet connected, but not yet on the gravity board.' : 'Connect Phantom to load your wheel account.'}</p></div>
       <div className="wallet-summary-card"><div className="market-card-label">Wheel Spendable</div><div className="wallet-summary-value">{fmtPoints(summary?.spendable || 0)}</div><p>{summary ? `Each spin costs ${fmtPoints(summary.wheelSpendAmount)} gravity.` : 'Connect wallet to load spendable gravity.'}</p></div>
       <div className="wallet-summary-card"><div className="market-card-label">Total Spent</div><div className="wallet-summary-value">{fmtPoints(summary?.totalSpent || 0)}</div><p>Real spend ledger from wheel spins.</p></div>
-      <div className="wallet-summary-card"><div className="market-card-label">Available to Claim</div><div className="wallet-summary-value">{summary ? `${fmtPoints(summary.claimableAmount)} ${summary.rewardToken}` : '0'}</div><p>{summary ? `${summary.pendingClaims} pending claim${summary.pendingClaims === 1 ? '' : 's'}.` : 'Connect wallet to load claimable rewards.'}</p></div>
+      <div className="wallet-summary-card"><div className="market-card-label">Available to Claim</div><div className="wallet-summary-value">{summary ? `${fmtPoints(summary.claimableAmount)} ${summary.rewardToken}` : '0'}</div><p>{summary ? `${summary.pendingClaims} ready to request payout${summary.pendingClaims === 1 ? '' : 's'}${summary.requestedClaims ? ` · ${summary.requestedClaims} already requested` : ''}.` : 'Connect wallet to load claimable rewards.'}</p>{summary?.pendingClaims ? <button className="wheel-secondary-btn wallet-claim-btn" data-claim-btn="1" disabled={claimSubmitting}>{claimSubmitting ? 'Requesting Claim…' : `Request ${fmtPoints(summary.claimableAmount)} ${summary.rewardToken}`}</button> : null}</div>
     </div>
     <div className="gravity-dashboard-subline"><span>{wallet && myRow ? `Your top-holder share is ${fmtProbability(myProbability)}. Wheel rewards now come from a signed spend flow, not fake local randomness.` : 'Connect your wallet to see real spendable gravity and claimable reward state.'}</span><button className="wheel-secondary-btn" id="toggle-hero-holders-btn">{expanded ? 'Show Top 20' : `Show All (${rows.length})`}</button></div>
     <FeaturedSpinCard spin={featuredSpin} />
@@ -236,6 +279,7 @@ function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, my
       <SpinsPanel title="Recent Spins" spins={recentSpins} empty="No wheel activity yet." />
       <SpinsPanel title="Your Spins" spins={mySpins} empty={wallet ? 'You have not spun the wheel yet.' : 'Connect Phantom to see your own spins.'} />
     </div>
+    <ClaimsPanel claims={claims} wallet={wallet} loading={claimsLoading} />
     <div className="gravity-hero-table-wrap"><table className="holders-table gravity-hero-table"><thead><tr><th>#</th><th>Wallet</th><th>Gravity</th><th>Balance</th><th>Last Minute</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.wallet} className={wallet === row.wallet ? 'active-wallet-row' : ''}><td>{row.rank}</td><td><code>{row.walletShort}</code></td><td>{fmtPoints(row.points)}</td><td>{fmtTokenAmount(row.balance)}</td><td>{fmtUsd(row.usdPerMinute)}</td></tr>)}</tbody></table></div>
   </div>
 }
@@ -256,6 +300,9 @@ export default function mount() {
   let walletLoading = false
   let recentSpins: SpinRow[] = []
   let mySpins: SpinRow[] = []
+  let claimHistory: ClaimRow[] = []
+  let claimsLoading = false
+  let claimSubmitting = false
   let featuredSpin: SpinRow | null = null
   let heroExpanded = false
   let wheelState: WheelState = { open: false, spinning: false, rotationDeg: 0, rewardTierId: null, rewardProbability: 0, rewardBps: 0, rewardAmount: 0, rewardToken: '', error: null }
@@ -311,6 +358,27 @@ export default function mount() {
     }
   }
 
+  const fetchClaims = async (wallet?: string | null) => {
+    if (!wallet) {
+      claimHistory = []
+      claimsLoading = false
+      renderAll()
+      return
+    }
+    claimsLoading = true
+    renderAll()
+    try {
+      const res = await fetch(`/api/wheel/claims?wallet=${encodeURIComponent(wallet)}&limit=8`)
+      const json = await res.json() as ClaimsData
+      claimHistory = json.claims || []
+    } catch {
+      claimHistory = []
+    } finally {
+      claimsLoading = false
+      renderAll()
+    }
+  }
+
   const fetchWalletSummary = async (wallet: string) => {
     walletLoading = true
     renderAll()
@@ -322,6 +390,7 @@ export default function mount() {
     } finally {
       walletLoading = false
       await fetchSpins(wallet)
+      await fetchClaims(wallet)
       renderAll()
     }
   }
@@ -337,6 +406,40 @@ export default function mount() {
       connectedWallet = result.publicKey.toString()
       await fetchWalletSummary(connectedWallet)
     } catch {}
+  }
+
+  const requestClaim = async () => {
+    const provider = window.solana
+    if (!provider?.isPhantom || !provider.signMessage || !connectedWallet) {
+      wheelState = { ...wheelState, error: 'Connect Phantom first.' }
+      renderAll()
+      return
+    }
+    if (!walletSummary?.pendingClaims || walletSummary.claimableAmount <= 0) {
+      wheelState = { ...wheelState, error: 'No pending rewards to claim.' }
+      renderAll()
+      return
+    }
+    try {
+      claimSubmitting = true
+      wheelState = { ...wheelState, error: null }
+      renderAll()
+      const challengeRes = await fetch('/api/wheel/claim/challenge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wallet: connectedWallet }) })
+      const challenge = await challengeRes.json()
+      if (!challengeRes.ok || !challenge.ok) throw new Error(challenge.error || 'Failed to create claim challenge')
+      const signed = await provider.signMessage(encoder.encode(challenge.message), 'utf8')
+      const signature = bytesToBase64(signed.signature)
+      const claimRes = await fetch('/api/wheel/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wallet: connectedWallet, requestId: challenge.requestId, signature }) })
+      const claim = await claimRes.json()
+      if (!claimRes.ok || !claim.ok) throw new Error(claim.error || 'Failed to submit claim request')
+      await fetchWalletSummary(connectedWallet)
+    } catch (error: any) {
+      wheelState = { ...wheelState, error: error?.message || 'Claim request failed' }
+      renderAll()
+    } finally {
+      claimSubmitting = false
+      renderAll()
+    }
   }
 
   const spinRealWheel = async () => {
@@ -391,7 +494,7 @@ export default function mount() {
     if (heroRoot) {
       if (gravityLoading) render(<div className="market-loading">Loading gravity dashboard…</div>, heroRoot)
       else if (gravityData?.leaderboard?.length) {
-        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} featuredSpin={featuredSpin} recentSpins={recentSpins} mySpins={mySpins} expanded={heroExpanded} />, heroRoot)
+        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} featuredSpin={featuredSpin} recentSpins={recentSpins} mySpins={mySpins} claims={claimHistory} claimsLoading={claimsLoading} claimSubmitting={claimSubmitting} expanded={heroExpanded} />, heroRoot)
         const toggle = document.getElementById('toggle-hero-holders-btn') as HTMLButtonElement | null
         if (toggle) toggle.onclick = () => { heroExpanded = !heroExpanded; renderAll() }
 
@@ -442,6 +545,10 @@ export default function mount() {
               }
             } catch {}
           }
+        })
+
+        document.querySelectorAll('[data-claim-btn]').forEach((node) => {
+          ;(node as HTMLButtonElement).onclick = requestClaim
         })
       } else render(<div className="market-loading">Gravity dashboard unavailable right now.</div>, heroRoot)
     }
@@ -504,14 +611,17 @@ export default function mount() {
   fetchMarket()
   fetchGravity()
   fetchSpins()
+  fetchClaims()
   if (initialSpinId) fetchFeaturedSpin(initialSpinId)
 
   const marketInterval = setInterval(fetchMarket, 30_000)
   const gravityInterval = setInterval(fetchGravity, 60_000)
   const spinsInterval = setInterval(() => fetchSpins(connectedWallet), 45_000)
+  const claimsInterval = setInterval(() => fetchClaims(connectedWallet), 45_000)
   cleanups.push(() => clearInterval(marketInterval))
   cleanups.push(() => clearInterval(gravityInterval))
   cleanups.push(() => clearInterval(spinsInterval))
+  cleanups.push(() => clearInterval(claimsInterval))
 
   return () => cleanups.forEach((fn) => fn())
 }

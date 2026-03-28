@@ -5,6 +5,7 @@ const encoder = new TextEncoder()
 
 export const WHEEL_SPEND_AMOUNT = Number(process.env.WHEEL_SPEND_AMOUNT || 100)
 export const WHEEL_CHALLENGE_TTL_MS = Number(process.env.WHEEL_CHALLENGE_TTL_MS || 5 * 60 * 1000)
+export const CLAIM_CHALLENGE_TTL_MS = Number(process.env.CLAIM_CHALLENGE_TTL_MS || 10 * 60 * 1000)
 export const TREASURY_REWARD_TOKEN = process.env.TREASURY_REWARD_TOKEN || 'USDC'
 export const TREASURY_SOURCE = process.env.TREASURY_SOURCE || 'env'
 export const TREASURY_AMOUNT = Number(process.env.TREASURY_AMOUNT || 0)
@@ -17,6 +18,13 @@ export const WHEEL_TIERS = [
   { id: 'mega', probability: 0.03, rewardBps: 100 },
   { id: 'cosmic', probability: 0.01, rewardBps: 250 },
 ] as const
+
+function ensureColumn(table: string, column: string, sql: string) {
+  const cols = db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!cols.some((col) => col.name === column)) {
+    db.exec(sql)
+  }
+}
 
 export function ensureWheelSchema() {
   db.exec(`
@@ -76,7 +84,32 @@ export function ensureWheelSchema() {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS claim_requests (
+      id TEXT PRIMARY KEY,
+      wallet TEXT NOT NULL,
+      amount REAL NOT NULL,
+      token TEXT NOT NULL,
+      claim_count INTEGER NOT NULL,
+      nonce TEXT NOT NULL UNIQUE,
+      expires_at INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      signature TEXT,
+      status TEXT NOT NULL,
+      processed_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS claim_request_items (
+      request_id TEXT NOT NULL,
+      claim_id TEXT NOT NULL,
+      PRIMARY KEY (request_id, claim_id)
+    );
   `)
+
+  ensureColumn('wheel_claims', 'request_id', `ALTER TABLE wheel_claims ADD COLUMN request_id TEXT`)
+  ensureColumn('wheel_claims', 'requested_at', `ALTER TABLE wheel_claims ADD COLUMN requested_at INTEGER`)
 }
 
 export function getWalletGravity(wallet: string) {
@@ -130,6 +163,19 @@ export function buildSpinMessage(wallet: string, challengeId: string, nonce: str
     `challengeId=${challengeId}`,
     `nonce=${nonce}`,
     `spend=${spendAmount}`,
+    `expiresAt=${expiresAt}`,
+  ].join('\n')
+}
+
+export function buildClaimMessage(wallet: string, requestId: string, nonce: string, amount: number, claimCount: number, token: string, expiresAt: number) {
+  return [
+    'Claim Gravity Rewards',
+    `wallet=${wallet}`,
+    `requestId=${requestId}`,
+    `nonce=${nonce}`,
+    `amount=${amount}`,
+    `claimCount=${claimCount}`,
+    `token=${token}`,
     `expiresAt=${expiresAt}`,
   ].join('\n')
 }
@@ -300,9 +346,9 @@ export async function consumeSpinChallenge(wallet: string, challengeId: string, 
     )
 
     db.query(`
-      INSERT INTO wheel_claims (id, spin_id, wallet, amount, token, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(claimId, spinId, wallet, rewardAmount, treasury.token, rewardAmount > 0 ? 'pending' : 'void', now, now)
+      INSERT INTO wheel_claims (id, spin_id, wallet, amount, token, status, tx_signature, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(claimId, spinId, wallet, rewardAmount, treasury.token, rewardAmount > 0 ? 'pending' : 'void', null, now, now)
   })()
 
   return {
@@ -324,14 +370,175 @@ export async function consumeSpinChallenge(wallet: string, challengeId: string, 
   }
 }
 
+export function createClaimRequest(wallet: string) {
+  ensureWheelSchema()
+  const now = Date.now()
+  const pendingClaims = db.query(`
+    SELECT id, amount, token
+    FROM wheel_claims
+    WHERE wallet = ? AND status = 'pending'
+    ORDER BY created_at ASC
+  `).all(wallet) as Array<{ id: string; amount: number; token: string }>
+
+  if (!pendingClaims.length) {
+    throw new Error('No pending rewards to claim')
+  }
+
+  const token = pendingClaims[0]!.token
+  if (pendingClaims.some((claim) => claim.token !== token)) {
+    throw new Error('Pending claims contain mixed reward tokens')
+  }
+
+  const amount = pendingClaims.reduce((sum, claim) => sum + Number(claim.amount || 0), 0)
+  const requestId = randomUUID()
+  const nonce = randomUUID()
+  const expiresAt = now + CLAIM_CHALLENGE_TTL_MS
+  const message = buildClaimMessage(wallet, requestId, nonce, amount, pendingClaims.length, token, expiresAt)
+
+  db.transaction(() => {
+    db.query(`
+      INSERT INTO claim_requests (id, wallet, amount, token, claim_count, nonce, expires_at, message, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(requestId, wallet, amount, token, pendingClaims.length, nonce, expiresAt, message, 'challenge_created', now, now)
+
+    for (const claim of pendingClaims) {
+      db.query(`INSERT INTO claim_request_items (request_id, claim_id) VALUES (?, ?)`).run(requestId, claim.id)
+    }
+  })()
+
+  return {
+    requestId,
+    wallet,
+    amount,
+    token,
+    claimCount: pendingClaims.length,
+    nonce,
+    expiresAt,
+    message,
+    claimIds: pendingClaims.map((claim) => claim.id),
+  }
+}
+
+export async function consumeClaimRequest(wallet: string, requestId: string, signature: string) {
+  ensureWheelSchema()
+  const now = Date.now()
+  const request = db.query(`
+    SELECT id, wallet, amount, token, claim_count, nonce, expires_at, message, signature, status, processed_at, created_at, updated_at
+    FROM claim_requests
+    WHERE id = ?
+  `).get(requestId) as {
+    id: string
+    wallet: string
+    amount: number
+    token: string
+    claim_count: number
+    nonce: string
+    expires_at: number
+    message: string
+    signature: string | null
+    status: string
+    processed_at: number | null
+    created_at: number
+    updated_at: number
+  } | null
+
+  if (!request) throw new Error('Claim request not found')
+  if (request.wallet !== wallet) throw new Error('Wallet mismatch')
+  if (request.processed_at || request.status === 'requested') throw new Error('Claim request already used')
+  if (request.expires_at < now) throw new Error('Claim request expired')
+
+  const linkedClaims = db.query(`
+    SELECT c.id, c.amount, c.token, c.status
+    FROM claim_request_items i
+    JOIN wheel_claims c ON c.id = i.claim_id
+    WHERE i.request_id = ?
+    ORDER BY c.created_at ASC
+  `).all(requestId) as Array<{ id: string; amount: number; token: string; status: string }>
+
+  if (!linkedClaims.length) throw new Error('Claim request has no claim rows')
+  if (linkedClaims.some((claim) => claim.status !== 'pending')) throw new Error('Some rewards are no longer claimable')
+
+  const amount = linkedClaims.reduce((sum, claim) => sum + Number(claim.amount || 0), 0)
+  if (Math.abs(amount - Number(request.amount || 0)) > 1e-9) {
+    throw new Error('Claim amount mismatch')
+  }
+
+  const ok = await verifyWalletSignature(wallet, request.message, signature)
+  if (!ok) throw new Error('Invalid wallet signature')
+
+  db.transaction(() => {
+    db.query(`
+      UPDATE claim_requests
+      SET signature = ?, status = 'requested', processed_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(signature, now, now, requestId)
+
+    db.query(`
+      UPDATE wheel_claims
+      SET status = 'requested', request_id = ?, requested_at = ?, updated_at = ?
+      WHERE id IN (SELECT claim_id FROM claim_request_items WHERE request_id = ?)
+    `).run(requestId, now, now, requestId)
+  })()
+
+  return {
+    requestId,
+    wallet,
+    amount,
+    token: request.token,
+    claimCount: linkedClaims.length,
+    status: 'requested',
+    requestedAt: now,
+    claimIds: linkedClaims.map((claim) => claim.id),
+  }
+}
+
+export function getClaimHistory(wallet: string, limit = 20) {
+  ensureWheelSchema()
+  const rows = db.query(`
+    SELECT c.id, c.spin_id as spinId, c.wallet, c.amount, c.token, c.status, c.tx_signature as txSignature,
+           c.request_id as requestId, c.requested_at as requestedAt, c.created_at as createdAt, c.updated_at as updatedAt,
+           s.tier_id as tierId, s.reward_bps as rewardBps
+    FROM wheel_claims c
+    LEFT JOIN wheel_spins s ON s.id = c.spin_id
+    WHERE c.wallet = ?
+    ORDER BY c.updated_at DESC, c.created_at DESC
+    LIMIT ?
+  `).all(wallet, limit) as Array<{
+    id: string
+    spinId: string
+    wallet: string
+    amount: number
+    token: string
+    status: string
+    txSignature: string | null
+    requestId: string | null
+    requestedAt: number | null
+    createdAt: number
+    updatedAt: number
+    tierId: string | null
+    rewardBps: number | null
+  }>
+
+  return rows
+}
+
 export function getWheelWalletSummary(wallet: string) {
   ensureWheelSchema()
   const synced = syncWalletLedger(wallet)
   const claims = db.query(`
-    SELECT COUNT(*) as pendingClaims, COALESCE(SUM(amount), 0) as claimableAmount
+    SELECT
+      COUNT(CASE WHEN status = 'pending' THEN 1 END) as pendingClaims,
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as claimableAmount,
+      COUNT(CASE WHEN status = 'requested' THEN 1 END) as requestedClaims,
+      COALESCE(SUM(CASE WHEN status = 'requested' THEN amount ELSE 0 END), 0) as requestedAmount
     FROM wheel_claims
-    WHERE wallet = ? AND status = 'pending'
-  `).get(wallet) as { pendingClaims: number; claimableAmount: number }
+    WHERE wallet = ?
+  `).get(wallet) as {
+    pendingClaims: number
+    claimableAmount: number
+    requestedClaims: number
+    requestedAmount: number
+  }
 
   const latestSpin = db.query(`
     SELECT id, tier_id as tierId, reward_amount as rewardAmount, created_at as createdAt
@@ -341,6 +548,22 @@ export function getWheelWalletSummary(wallet: string) {
     LIMIT 1
   `).get(wallet) as { id: string; tierId: string; rewardAmount: number; createdAt: number } | null
 
+  const latestClaimRequest = db.query(`
+    SELECT id, amount, token, claim_count as claimCount, status, processed_at as processedAt, created_at as createdAt
+    FROM claim_requests
+    WHERE wallet = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(wallet) as {
+    id: string
+    amount: number
+    token: string
+    claimCount: number
+    status: string
+    processedAt: number | null
+    createdAt: number
+  } | null
+
   return {
     wallet,
     totalEarned: synced.totalEarned,
@@ -348,9 +571,12 @@ export function getWheelWalletSummary(wallet: string) {
     spendable: synced.spendable,
     pendingClaims: claims?.pendingClaims || 0,
     claimableAmount: claims?.claimableAmount || 0,
+    requestedClaims: claims?.requestedClaims || 0,
+    requestedAmount: claims?.requestedAmount || 0,
     wheelSpendAmount: WHEEL_SPEND_AMOUNT,
     rewardToken: TREASURY_REWARD_TOKEN,
     rewardTiers: WHEEL_TIERS,
     latestSpin,
+    latestClaimRequest,
   }
 }

@@ -53,6 +53,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .wallet-summary-card { background:rgba(17,17,40,.82); border:1px solid rgba(129,140,248,.18); border-radius:18px; padding:18px; }
 .wallet-summary-value { font-size:28px; font-weight:800; color:var(--text); margin-bottom:6px; }
 .wallet-summary-card p { color:var(--text2); font-size:12px; line-height:1.5; }
+.wallet-claim-btn { margin-top:12px; width:100%; }
 .gravity-dashboard-subline { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:16px; color:var(--text2); font-size:13px; }
 .gravity-hero-table-wrap { max-height:540px; overflow:auto; border:1px solid rgba(129,140,248,.14); border-radius:18px; }
 .active-wallet-row td { background:rgba(99,102,241,.10) !important; }
@@ -69,6 +70,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .featured-spin-x-link { padding:14px 22px; border-radius:10px; }
 .spins-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; position:relative; z-index:1; }
 .spins-card { background:rgba(17,17,40,.72); border:1px solid rgba(129,140,248,.16); border-radius:18px; padding:18px; }
+.claims-card { margin-bottom:18px; position:relative; z-index:1; }
 .spins-card-header h4 { font-size:18px; margin-top:2px; }
 .spins-empty { color:var(--text2); font-size:13px; }
 .spins-list { display:flex; flex-direction:column; gap:10px; }
