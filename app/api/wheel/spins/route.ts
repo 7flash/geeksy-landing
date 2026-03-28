@@ -1,4 +1,5 @@
 import { db } from '../../../../lib/db'
+import { getWalletDisplay, getWalletLabel } from '../../../../lib/gksy'
 
 export async function GET(req: Request) {
   try {
@@ -14,11 +15,13 @@ export async function GET(req: Request) {
         FROM wheel_spins
         WHERE id = ?
         LIMIT 1
-      `).get(spinId)
-      return Response.json({ ok: true, spin: row || null })
+      `).get(spinId) as any
+
+      const spin = row ? { ...row, walletShort: getWalletDisplay(row.wallet), walletLabel: getWalletLabel(row.wallet) } : null
+      return Response.json({ ok: true, spin })
     }
 
-    const rows = wallet
+    const rows = (wallet
       ? db.query(`
           SELECT id, wallet, tier_id as tierId, reward_bps as rewardBps, reward_amount as rewardAmount,
                  treasury_amount_at_spin as treasuryAmountAtSpin, status, created_at as createdAt
@@ -33,9 +36,9 @@ export async function GET(req: Request) {
           FROM wheel_spins
           ORDER BY created_at DESC
           LIMIT ?
-        `).all(limit)
+        `).all(limit)) as any[]
 
-    return Response.json({ ok: true, spins: rows })
+    return Response.json({ ok: true, spins: rows.map((row) => ({ ...row, walletShort: getWalletDisplay(row.wallet), walletLabel: getWalletLabel(row.wallet) })) })
   } catch (error: any) {
     return Response.json({ ok: false, error: error?.message || 'Failed to load wheel spins' }, { status: 500 })
   }

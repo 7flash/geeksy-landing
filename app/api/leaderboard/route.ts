@@ -1,5 +1,5 @@
-import { db, shortWallet } from '../../../lib/db'
-import { fetchMarketSnapshot } from '../../../lib/gksy'
+import { db } from '../../../lib/db'
+import { fetchMarketSnapshot, getWalletDisplay, getWalletLabel } from '../../../lib/gksy'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -38,7 +38,8 @@ export async function GET(req: Request) {
     leaderboard: rows.map((row, i) => ({
       rank: i + 1,
       wallet: row.wallet,
-      walletShort: shortWallet(row.wallet),
+      walletShort: getWalletDisplay(row.wallet),
+      walletLabel: getWalletLabel(row.wallet),
       points: row.points,
       streakMinutes: row.streak_minutes,
       balance: row.balance || 0,

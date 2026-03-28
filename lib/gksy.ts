@@ -8,6 +8,22 @@ export const EXCLUDED_GRAVITY_WALLETS = new Set([
   'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM', // LP
 ])
 
+export const KNOWN_WALLET_LABELS: Record<string, string> = {
+  'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM': 'GKSY LP',
+}
+
+export function shortWalletLabel(wallet: string) {
+  return `${wallet.slice(0, 6)}...${wallet.slice(-6)}`
+}
+
+export function getWalletLabel(wallet: string) {
+  return KNOWN_WALLET_LABELS[wallet] || null
+}
+
+export function getWalletDisplay(wallet: string) {
+  return getWalletLabel(wallet) || shortWalletLabel(wallet)
+}
+
 export type OwnerBalanceRow = {
   owner: string
   balance: number

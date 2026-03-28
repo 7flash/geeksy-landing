@@ -38,6 +38,7 @@ type LeaderboardRow = {
   rank: number
   wallet: string
   walletShort: string
+  walletLabel?: string | null
   points: number
   streakMinutes: number
   balance: number
@@ -97,6 +98,8 @@ type WalletSummaryData = {
 type SpinRow = {
   id: string
   wallet: string
+  walletShort?: string
+  walletLabel?: string | null
   tierId: string
   rewardBps: number
   rewardAmount: number
@@ -116,6 +119,8 @@ type ClaimRow = {
   id: string
   spinId: string
   wallet: string
+  walletShort?: string
+  walletLabel?: string | null
   amount: number
   token: string
   status: string
@@ -205,7 +210,7 @@ function buildSpinPermalink(spinId: string) {
   return `${window.location.origin}/spin/${spinId}`
 }
 function buildSpinShareText(spin: SpinRow) {
-  const wallet = shortWallet(spin.wallet) || 'a GKSY holder'
+  const wallet = spin.walletLabel || spin.walletShort || shortWallet(spin.wallet) || 'a GKSY holder'
   return `I just hit the ${spin.tierId.toUpperCase()} reward tier on Geeksy's gravity wheel. ${wallet} unlocked ${rewardPctLabel(spin.rewardBps)} of treasury rewards (${fmtPoints(spin.rewardAmount)} recorded) by spending accumulated GKSY gravity.\n\nHold GKSY. Accumulate gravity minute by minute. Spin the wheel. #Geeksy #GKSY`
 }
 function buildSpinTweetUrl(spin: SpinRow) {
@@ -238,14 +243,14 @@ function FeaturedSpinCard({ spin }: { spin: SpinRow | null }) {
 function SpinsPanel({ title, spins, empty }: { title: string; spins: SpinRow[]; empty: string }) {
   return <div className="spins-card">
     <div className="spins-card-header"><div className="market-card-label">Spin History</div><h4>{title}</h4></div>
-    {!spins.length ? <p className="spins-empty">{empty}</p> : <div className="spins-list">{spins.map((spin) => <div className="spin-row" key={spin.id}><div><div className="spin-tier">{spin.tierId.toUpperCase()}</div><div className="spin-meta">{new Date(spin.createdAt).toLocaleString()}</div></div><div className="spin-reward"><strong>{rewardPctLabel(spin.rewardBps)}</strong><span>{fmtPoints(spin.rewardAmount)}</span></div></div>)}</div>}
+    {!spins.length ? <p className="spins-empty">{empty}</p> : <div className="spins-list">{spins.map((spin) => <div className="spin-row" key={spin.id}><div><div className="spin-tier">{spin.tierId.toUpperCase()}</div><div className="spin-meta">{spin.walletLabel || spin.walletShort || shortWallet(spin.wallet)} · {new Date(spin.createdAt).toLocaleString()}</div></div><div className="spin-reward"><strong>{rewardPctLabel(spin.rewardBps)}</strong><span>{fmtPoints(spin.rewardAmount)}</span></div></div>)}</div>}
   </div>
 }
 
 function ClaimsPanel({ claims, wallet, loading }: { claims: ClaimRow[]; wallet: string | null; loading: boolean }) {
   return <div className="spins-card claims-card">
     <div className="spins-card-header"><div className="market-card-label">Claim History</div><h4>Your Claims</h4></div>
-    {loading ? <p className="spins-empty">Loading claim history…</p> : !wallet ? <p className="spins-empty">Connect Phantom to load your claim history.</p> : !claims.length ? <p className="spins-empty">No claim records yet. Spin the wheel to earn treasury rewards.</p> : <div className="spins-list">{claims.map((claim) => <div className="spin-row" key={claim.id}><div><div className="spin-tier">{claim.tierId ? claim.tierId.toUpperCase() : 'CLAIM'}</div><div className="spin-meta">{new Date((claim.requestedAt || claim.createdAt)).toLocaleString()} · {claim.status}</div></div><div className="spin-reward"><strong>{fmtPoints(claim.amount)} {claim.token}</strong><span>{claim.rewardBps != null ? rewardPctLabel(claim.rewardBps) : 'Treasury reward'}</span></div></div>)}</div>}
+    {loading ? <p className="spins-empty">Loading claim history…</p> : !wallet ? <p className="spins-empty">Connect Phantom to load your claim history.</p> : !claims.length ? <p className="spins-empty">No claim records yet. Spin the wheel to earn treasury rewards.</p> : <div className="spins-list">{claims.map((claim) => <div className="spin-row" key={claim.id}><div><div className="spin-tier">{claim.tierId ? claim.tierId.toUpperCase() : 'CLAIM'}</div><div className="spin-meta">{claim.walletLabel || claim.walletShort || shortWallet(claim.wallet)} · {new Date((claim.requestedAt || claim.createdAt)).toLocaleString()} · {claim.status}</div></div><div className="spin-reward"><strong>{fmtPoints(claim.amount)} {claim.token}</strong><span>{claim.rewardBps != null ? rewardPctLabel(claim.rewardBps) : 'Treasury reward'}</span></div></div>)}</div>}
   </div>
 }
 
@@ -266,7 +271,7 @@ function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, my
   const myProbability = myRow ? percentOfGravity(myRow, rows.slice(0, 12)) : 0
 
   return <div className="gravity-dashboard-card cosmic-dashboard-card">
-    <div className="gravity-dashboard-header"><div><div className="market-card-label">Gravity Dashboard</div><h3>Live holder leaderboard</h3></div><div className="gravity-wallet-state">{wallet ? <code>{shortWallet(wallet)}</code> : <span>Not connected</span>}</div></div>
+    <div className="gravity-dashboard-header"><div><div className="market-card-label">Gravity Dashboard</div><h3>Live holder leaderboard</h3></div><div className="gravity-wallet-state">{wallet ? <code>{myRow?.walletLabel || shortWallet(wallet)}</code> : <span>Not connected</span>}</div></div>
     <div className="wallet-summary-grid">
       <div className="wallet-summary-card"><div className="market-card-label">Your Gravity</div><div className="wallet-summary-value">{fmtPoints(summary?.totalEarned || 0)}</div><p>{myRow ? `Rank #${myRow.rank}` : wallet ? 'Wallet connected, but not yet on the gravity board.' : 'Connect Phantom to load your wheel account.'}</p></div>
       <div className="wallet-summary-card"><div className="market-card-label">Wheel Spendable</div><div className="wallet-summary-value">{fmtPoints(summary?.spendable || 0)}</div><p>{summary ? `Each spin costs ${fmtPoints(summary.wheelSpendAmount)} gravity.` : 'Connect wallet to load spendable gravity.'}</p></div>
