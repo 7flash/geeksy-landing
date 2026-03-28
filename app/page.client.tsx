@@ -97,6 +97,7 @@ type SpinRow = {
 type SpinsData = {
   ok: boolean
   spins?: SpinRow[]
+  spin?: SpinRow | null
   error?: string
 }
 
@@ -167,6 +168,11 @@ function getRewardRotation(tiers: RewardTier[], tierId: string, currentRotation:
   while (delta < 0) delta += 360
   return currentRotation + 1440 + delta
 }
+function buildSpinPermalink(spinId: string) {
+  const url = new URL(window.location.href)
+  url.searchParams.set('spin', spinId)
+  return url.toString()
+}
 
 function MarketPanel({ data, loading }: { data: MarketData | null; loading: boolean }) {
   if (loading) return <div className="market-loading">Loading live token data…</div>
@@ -182,6 +188,11 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
   </div>
 }
 
+function FeaturedSpinCard({ spin }: { spin: SpinRow | null }) {
+  if (!spin) return null
+  return <div className="featured-spin-card"><div className="market-card-label">Featured Spin</div><div className="featured-spin-top"><div><h4>{spin.tierId.toUpperCase()}</h4><p>{new Date(spin.createdAt).toLocaleString()}</p></div><button className="wheel-secondary-btn" data-spin-link={spin.id}>Copy Permalink</button></div><div className="featured-spin-metrics"><div><span>Reward</span><strong>{rewardPctLabel(spin.rewardBps)} treasury</strong></div><div><span>Recorded</span><strong>{fmtPoints(spin.rewardAmount)}</strong></div><div><span>Status</span><strong>{spin.status}</strong></div></div></div>
+}
+
 function SpinsPanel({ title, spins, empty }: { title: string; spins: SpinRow[]; empty: string }) {
   return <div className="spins-card">
     <div className="spins-card-header"><div className="market-card-label">Spin History</div><h4>{title}</h4></div>
@@ -189,10 +200,11 @@ function SpinsPanel({ title, spins, empty }: { title: string; spins: SpinRow[]; 
   </div>
 }
 
-function GravityHeroPanel({ rows, wallet, summary, recentSpins, mySpins, expanded }: {
+function GravityHeroPanel({ rows, wallet, summary, featuredSpin, recentSpins, mySpins, expanded }: {
   rows: LeaderboardRow[]
   wallet: string | null
   summary: WalletSummaryData | null
+  featuredSpin: SpinRow | null
   recentSpins: SpinRow[]
   mySpins: SpinRow[]
   expanded: boolean
@@ -210,6 +222,7 @@ function GravityHeroPanel({ rows, wallet, summary, recentSpins, mySpins, expande
       <div className="wallet-summary-card"><div className="market-card-label">Available to Claim</div><div className="wallet-summary-value">{summary ? `${fmtPoints(summary.claimableAmount)} ${summary.rewardToken}` : '0'}</div><p>{summary ? `${summary.pendingClaims} pending claim${summary.pendingClaims === 1 ? '' : 's'}.` : 'Connect wallet to load claimable rewards.'}</p></div>
     </div>
     <div className="gravity-dashboard-subline"><span>{wallet && myRow ? `Your top-holder share is ${fmtProbability(myProbability)}. Wheel rewards now come from a signed spend flow, not fake local randomness.` : 'Connect your wallet to see real spendable gravity and claimable reward state.'}</span><button className="wheel-secondary-btn" id="toggle-hero-holders-btn">{expanded ? 'Show Top 20' : `Show All (${rows.length})`}</button></div>
+    <FeaturedSpinCard spin={featuredSpin} />
     <div className="spins-grid">
       <SpinsPanel title="Recent Spins" spins={recentSpins} empty="No wheel activity yet." />
       <SpinsPanel title="Your Spins" spins={mySpins} empty={wallet ? 'You have not spun the wheel yet.' : 'Connect Phantom to see your own spins.'} />
@@ -234,12 +247,14 @@ export default function mount() {
   let walletLoading = false
   let recentSpins: SpinRow[] = []
   let mySpins: SpinRow[] = []
+  let featuredSpin: SpinRow | null = null
   let heroExpanded = false
   let wheelState: WheelState = { open: false, spinning: false, rotationDeg: 0, rewardTierId: null, rewardProbability: 0, rewardBps: 0, rewardAmount: 0, rewardToken: '', error: null }
 
   const copyBtn = document.getElementById('copy-install-btn') as HTMLButtonElement | null
   const marketRoot = document.getElementById('market-root')
   const heroRoot = document.getElementById('gravity-hero-root')
+  const initialSpinId = new URL(window.location.href).searchParams.get('spin')
 
   let wheelModalMount = document.getElementById('wheel-modal-mount')
   if (!wheelModalMount) {
@@ -247,6 +262,23 @@ export default function mount() {
     wheelModalMount.id = 'wheel-modal-mount'
     document.body.appendChild(wheelModalMount)
     cleanups.push(() => wheelModalMount?.remove())
+  }
+
+  const fetchFeaturedSpin = async (spinId: string | null) => {
+    if (!spinId) {
+      featuredSpin = recentSpins[0] || null
+      renderAll()
+      return
+    }
+    try {
+      const res = await fetch(`/api/wheel/spins?id=${encodeURIComponent(spinId)}`)
+      const json = await res.json() as SpinsData
+      featuredSpin = json.spin || recentSpins[0] || null
+    } catch {
+      featuredSpin = recentSpins[0] || null
+    } finally {
+      renderAll()
+    }
   }
 
   const fetchSpins = async (wallet?: string | null) => {
@@ -265,6 +297,7 @@ export default function mount() {
       recentSpins = []
       mySpins = []
     } finally {
+      await fetchFeaturedSpin(new URL(window.location.href).searchParams.get('spin'))
       renderAll()
     }
   }
@@ -330,6 +363,9 @@ export default function mount() {
       wheelState = { ...wheelState, spinning: true, rotationDeg: getRewardRotation(tiers, spin.reward.tier, wheelState.rotationDeg), rewardTierId: null, rewardProbability: 0, rewardBps: 0, rewardAmount: 0, rewardToken: spin.reward.token, error: null }
       renderAll()
       setTimeout(async () => {
+        const url = new URL(window.location.href)
+        url.searchParams.set('spin', spin.spinId)
+        history.replaceState({}, '', url)
         wheelState = { ...wheelState, spinning: false, rewardTierId: spin.reward.tier, rewardProbability: (tier?.probability || 0) * 100, rewardBps: spin.reward.rewardBps, rewardAmount: spin.reward.rewardAmount, rewardToken: spin.reward.token, error: null }
         renderAll()
         if (connectedWallet) await fetchWalletSummary(connectedWallet)
@@ -346,9 +382,20 @@ export default function mount() {
     if (heroRoot) {
       if (gravityLoading) render(<div className="market-loading">Loading gravity dashboard…</div>, heroRoot)
       else if (gravityData?.leaderboard?.length) {
-        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} recentSpins={recentSpins} mySpins={mySpins} expanded={heroExpanded} />, heroRoot)
+        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} featuredSpin={featuredSpin} recentSpins={recentSpins} mySpins={mySpins} expanded={heroExpanded} />, heroRoot)
         const toggle = document.getElementById('toggle-hero-holders-btn') as HTMLButtonElement | null
         if (toggle) toggle.onclick = () => { heroExpanded = !heroExpanded; renderAll() }
+        document.querySelectorAll('[data-spin-link]').forEach((node) => {
+          ;(node as HTMLButtonElement).onclick = async () => {
+            const spinId = (node as HTMLButtonElement).dataset.spinLink
+            if (!spinId) return
+            try {
+              await navigator.clipboard.writeText(buildSpinPermalink(spinId))
+              ;(node as HTMLButtonElement).textContent = 'Copied Link'
+              setTimeout(() => { ;(node as HTMLButtonElement).textContent = 'Copy Permalink' }, 1500)
+            } catch {}
+          }
+        })
       } else render(<div className="market-loading">Gravity dashboard unavailable right now.</div>, heroRoot)
     }
 
@@ -410,6 +457,7 @@ export default function mount() {
   fetchMarket()
   fetchGravity()
   fetchSpins()
+  if (initialSpinId) fetchFeaturedSpin(initialSpinId)
 
   const marketInterval = setInterval(fetchMarket, 30_000)
   const gravityInterval = setInterval(fetchGravity, 60_000)
