@@ -4,8 +4,9 @@ declare global {
   interface Window {
     solana?: {
       isPhantom?: boolean
-      connect: () => Promise<{ publicKey: { toString(): string } }>
+      connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>
       disconnect: () => Promise<void>
+      signMessage?: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<{ signature: Uint8Array }>
     }
   }
 }
@@ -56,16 +57,47 @@ type LeaderboardData = {
   scoringRule?: string
 }
 
+type RewardTier = {
+  id: string
+  probability: number
+  rewardBps: number
+}
+
+type WalletSummaryData = {
+  ok: boolean
+  wallet: string
+  totalEarned: number
+  totalSpent: number
+  spendable: number
+  pendingClaims: number
+  claimableAmount: number
+  wheelSpendAmount: number
+  rewardToken: string
+  rewardTiers: RewardTier[]
+  latestSpin?: {
+    id: string
+    tierId: string
+    rewardAmount: number
+    createdAt: number
+  } | null
+  error?: string
+}
+
 type WheelState = {
   open: boolean
   spinning: boolean
   rotationDeg: number
-  winnerWallet: string | null
-  winnerProbability: number
+  rewardTierId: string | null
+  rewardProbability: number
+  rewardBps: number
+  rewardAmount: number
+  rewardToken: string
+  error: string | null
 }
 
-const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6', '#a855f7', '#f97316', '#10b981', '#3b82f6']
+const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6']
 const DEFAULT_VISIBLE_HOLDERS = 20
+const encoder = new TextEncoder()
 
 function fmtUsd(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
@@ -96,59 +128,46 @@ function fmtPoints(n: number) {
   return n.toFixed(2)
 }
 
-function shortWinnerWallet(wallet: string, leaderboard: LeaderboardRow[]) {
-  return leaderboard.find((row) => row.wallet === wallet)?.walletShort || wallet
+function shortWallet(wallet: string | null) {
+  if (!wallet) return null
+  return `${wallet.slice(0, 6)}...${wallet.slice(-6)}`
 }
 
-function percentOf(row: LeaderboardRow, rows: LeaderboardRow[]) {
+function percentOfGravity(row: LeaderboardRow, rows: LeaderboardRow[]) {
   const total = rows.reduce((sum, item) => sum + item.points, 0)
   return total > 0 ? (row.points / total) * 100 : 0
 }
 
-function buildWheelSegments(rows: LeaderboardRow[]) {
-  const total = rows.reduce((sum, row) => sum + row.points, 0)
+function rewardPctLabel(rewardBps: number) {
+  return `${(rewardBps / 100).toFixed(2)}%`
+}
+
+function buildRewardSegments(tiers: RewardTier[]) {
   let start = 0
-  const segments = rows.map((row, index) => {
-    const fraction = total > 0 ? row.points / total : 0
-    const degrees = fraction * 180
+  const segments = tiers.map((tier, index) => {
+    const degrees = tier.probability * 180
     const segment = {
-      row,
+      tier,
       color: WHEEL_COLORS[index % WHEEL_COLORS.length],
       start,
       end: start + degrees,
-      degrees,
-      probability: fraction,
       center: start + degrees / 2,
     }
     start += degrees
     return segment
   })
-  return { segments, total }
+  return segments
 }
 
-function chooseWeightedWinner(rows: LeaderboardRow[]) {
-  const total = rows.reduce((sum, row) => sum + row.points, 0)
-  if (total <= 0) return { row: rows[0], probability: 0 }
-  let roll = Math.random() * total
-  for (const row of rows) {
-    roll -= row.points
-    if (roll <= 0) return { row, probability: (row.points / total) * 100 }
-  }
-  const last = rows[rows.length - 1]
-  return { row: last, probability: last ? (last.points / total) * 100 : 0 }
+function buildWheelGradient(tiers: RewardTier[]) {
+  const segments = buildRewardSegments(tiers)
+  return `conic-gradient(from 180deg, ${segments.map((segment) => `${segment.color} ${segment.start}deg ${segment.end}deg`).join(', ')})`
 }
 
-function buildWheelGradient(rows: LeaderboardRow[]) {
-  const { segments } = buildWheelSegments(rows)
-  const stops = segments.map((segment) => `${segment.color} ${segment.start}deg ${segment.end}deg`)
-  return `conic-gradient(from 180deg, ${stops.join(', ')})`
-}
-
-function getWinnerRotation(rows: LeaderboardRow[], winnerWallet: string, currentRotation: number) {
-  const { segments } = buildWheelSegments(rows)
-  const segment = segments.find((entry) => entry.row.wallet === winnerWallet)
+function getRewardRotation(tiers: RewardTier[], tierId: string, currentRotation: number) {
+  const segments = buildRewardSegments(tiers)
+  const segment = segments.find((entry) => entry.tier.id === tierId)
   if (!segment) return currentRotation + 1440
-
   const pointerAngle = 90
   const center = 180 + segment.center
   const target = pointerAngle - center
@@ -156,6 +175,12 @@ function getWinnerRotation(rows: LeaderboardRow[], winnerWallet: string, current
   let delta = target - normalizedCurrent
   while (delta < 0) delta += 360
   return currentRotation + 1440 + delta
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 function MarketPanel({ data, loading }: { data: MarketData | null; loading: boolean }) {
@@ -186,16 +211,17 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
 function GravityHeroPanel({
   rows,
   wallet,
+  summary,
   expanded,
 }: {
   rows: LeaderboardRow[]
   wallet: string | null
+  summary: WalletSummaryData | null
   expanded: boolean
 }) {
   const visibleRows = expanded ? rows : rows.slice(0, DEFAULT_VISIBLE_HOLDERS)
   const myRow = wallet ? rows.find((row) => row.wallet === wallet) || null : null
-  const myProbability = myRow ? percentOf(myRow, rows.slice(0, 12)) : 0
-  const derivedAmount = myRow?.points || 0
+  const myProbability = myRow ? percentOfGravity(myRow, rows.slice(0, 12)) : 0
 
   return (
     <div className="gravity-dashboard-card cosmic-dashboard-card">
@@ -205,19 +231,19 @@ function GravityHeroPanel({
           <h3>Live holder leaderboard</h3>
         </div>
         <div className="gravity-wallet-state">
-          {wallet ? <code>{wallet.slice(0, 6)}...{wallet.slice(-6)}</code> : <span>Not connected</span>}
+          {wallet ? <code>{shortWallet(wallet)}</code> : <span>Not connected</span>}
         </div>
       </div>
 
       <div className="wallet-summary-grid">
-        <div className="wallet-summary-card"><div className="market-card-label">Your Gravity</div><div className="wallet-summary-value">{fmtPoints(myRow?.points || 0)}</div><p>{myRow ? `Rank #${myRow.rank}` : 'Connect Phantom to match your wallet.'}</p></div>
-        <div className="wallet-summary-card"><div className="market-card-label">Wheel Spendable</div><div className="wallet-summary-value">{fmtPoints(derivedAmount)}</div><p>Derived from current gravity until spend tracking exists.</p></div>
-        <div className="wallet-summary-card"><div className="market-card-label">Total Earned</div><div className="wallet-summary-value">{fmtPoints(derivedAmount)}</div><p>Current accumulated gravity score.</p></div>
-        <div className="wallet-summary-card"><div className="market-card-label">Available to Claim</div><div className="wallet-summary-value">{fmtPoints(derivedAmount)}</div><p>UI placeholder until claim ledger/backend is live.</p></div>
+        <div className="wallet-summary-card"><div className="market-card-label">Your Gravity</div><div className="wallet-summary-value">{fmtPoints(summary?.totalEarned || 0)}</div><p>{myRow ? `Rank #${myRow.rank}` : wallet ? 'Wallet connected, but not yet on the gravity board.' : 'Connect Phantom to load your wheel account.'}</p></div>
+        <div className="wallet-summary-card"><div className="market-card-label">Wheel Spendable</div><div className="wallet-summary-value">{fmtPoints(summary?.spendable || 0)}</div><p>{summary ? `Each spin costs ${fmtPoints(summary.wheelSpendAmount)} gravity.` : 'Connect wallet to load spendable gravity.'}</p></div>
+        <div className="wallet-summary-card"><div className="market-card-label">Total Spent</div><div className="wallet-summary-value">{fmtPoints(summary?.totalSpent || 0)}</div><p>Real spend ledger from wheel spins.</p></div>
+        <div className="wallet-summary-card"><div className="market-card-label">Available to Claim</div><div className="wallet-summary-value">{summary ? `${fmtPoints(summary.claimableAmount)} ${summary.rewardToken}` : '0'}</div><p>{summary ? `${summary.pendingClaims} pending claim${summary.pendingClaims === 1 ? '' : 's'}.` : 'Connect wallet to load claimable rewards.'}</p></div>
       </div>
 
       <div className="gravity-dashboard-subline">
-        <span>{wallet && myRow ? `Your top-12 wheel chance: ${fmtProbability(myProbability)}` : 'Connect your wallet to see your personal gravity summary.'}</span>
+        <span>{wallet && myRow ? `Your top-holder share is ${fmtProbability(myProbability)}. Wheel rewards now come from a signed spend flow, not fake local randomness.` : 'Connect your wallet to see real spendable gravity and claimable reward state.'}</span>
         <button className="wheel-secondary-btn" id="toggle-hero-holders-btn">{expanded ? 'Show Top 20' : `Show All (${rows.length})`}</button>
       </div>
 
@@ -249,18 +275,25 @@ function GravityHeroPanel({
   )
 }
 
-function WheelModal({ rows, state }: { rows: LeaderboardRow[]; state: WheelState }) {
-  const wheelRows = rows.slice(0, 12)
-  const gradient = buildWheelGradient(wheelRows)
+function RewardWheelModal({
+  tiers,
+  summary,
+  state,
+}: {
+  tiers: RewardTier[]
+  summary: WalletSummaryData | null
+  state: WheelState
+}) {
+  const gradient = buildWheelGradient(tiers)
   return (
     <div className="wheel-modal-backdrop" id="wheel-backdrop">
       <div className="wheel-modal cosmic-wheel-modal" role="dialog" aria-modal="true" aria-labelledby="wheel-title">
         <div className="cosmic-stars" />
         <button className="wheel-close" id="wheel-close-btn" aria-label="Close">×</button>
         <div className="wheel-modal-copy">
-          <div className="section-label">Cosmic weighted draw</div>
-          <h3 id="wheel-title">Spin the Gravity Wheel</h3>
-          <p>Slice size is proportional to gravity score. More gravity means more space on the wheel and a higher chance to win.</p>
+          <div className="section-label">Treasury reward wheel</div>
+          <h3 id="wheel-title">Spend gravity. Spin for treasury reward.</h3>
+          <p>Every spin uses a signed Phantom challenge, spends real gravity, and returns a treasury reward tier recorded in the backend ledger.</p>
         </div>
         <div className="wheel-stage cosmic-wheel-stage">
           <div className="wheel-orbit-ring orbit-ring-1" />
@@ -272,28 +305,15 @@ function WheelModal({ rows, state }: { rows: LeaderboardRow[]; state: WheelState
           </div>
         </div>
         <div className="wheel-actions">
-          <button className="btn-hero" id="spin-wheel-btn" disabled={state.spinning}>{state.spinning ? 'Spinning…' : 'Spin the Wheel'}</button>
+          <button className="btn-hero" id="spin-wheel-btn" disabled={state.spinning || !summary || summary.spendable < (summary?.wheelSpendAmount || 0)}>{state.spinning ? 'Signing + spinning…' : `Spin for ${fmtPoints(summary?.wheelSpendAmount || 0)} gravity`}</button>
           <button className="wheel-secondary-btn" id="close-wheel-btn">Close</button>
         </div>
-        {state.winnerWallet ? <div className="wheel-result cosmic-result"><div className="market-card-label">Winner</div><div className="wheel-result-wallet"><code>{shortWinnerWallet(state.winnerWallet, rows)}</code></div><p>Win probability: {fmtProbability(state.winnerProbability)}</p></div> : null}
+        {state.error ? <div className="wheel-result cosmic-result"><div className="market-card-label">Spin error</div><p>{state.error}</p></div> : null}
+        {state.rewardTierId ? <div className="wheel-result cosmic-result"><div className="market-card-label">Reward unlocked</div><div className="wheel-result-wallet"><code>{state.rewardTierId.toUpperCase()}</code></div><p>Reward tier: {rewardPctLabel(state.rewardBps)} of treasury</p><p>Recorded reward: {fmtPoints(state.rewardAmount)} {state.rewardToken}</p><p>Tier probability: {fmtProbability(state.rewardProbability)}</p></div> : null}
         <div className="wheel-legend">
-          {wheelRows.map((row, index) => <div className="wheel-legend-row" key={row.wallet}><span className="wheel-color" style={{ background: WHEEL_COLORS[index % WHEEL_COLORS.length] }} /><code>{row.walletShort}</code><span>{fmtPoints(row.points)} gravity</span><span>{fmtProbability(percentOf(row, wheelRows))}</span></div>)}
+          {tiers.map((tier, index) => <div className="wheel-legend-row" key={tier.id}><span className="wheel-color" style={{ background: WHEEL_COLORS[index % WHEEL_COLORS.length] }} /><code>{tier.id}</code><span>{rewardPctLabel(tier.rewardBps)} treasury</span><span>{fmtProbability(tier.probability * 100)}</span></div>)}
         </div>
       </div>
-    </div>
-  )
-}
-
-function GravitySectionPanel({ data, loading }: { data: LeaderboardData | null; loading: boolean }) {
-  if (loading) return <div className="market-loading">Loading gravity leaderboard…</div>
-  if (!data?.leaderboard?.length || !data.stats) return <div className="market-loading">Gravity leaderboard unavailable right now.</div>
-  return (
-    <div className="holders-wrap">
-      <div className="holders-meta">
-        <div className="holders-meta-card"><div className="market-card-label">Total Gravity</div><div className="holders-meta-big">{fmtPoints(data.stats.totalPoints)}</div></div>
-        <div className="holders-meta-card"><div className="market-card-label">Scored Wallets</div><div className="holders-meta-big">{data.stats.activeScoredHolders}</div></div>
-      </div>
-      <p className="holders-footnote">{data.scoringRule} Last update: {data.stats.lastUpdated ? new Date(data.stats.lastUpdated).toLocaleString() : 'n/a'}.</p>
     </div>
   )
 }
@@ -305,8 +325,10 @@ export default function mount() {
   let gravityLoading = true
   let gravityData: LeaderboardData | null = null
   let connectedWallet: string | null = null
+  let walletSummary: WalletSummaryData | null = null
+  let walletLoading = false
   let heroExpanded = false
-  let wheelState: WheelState = { open: false, spinning: false, rotationDeg: 0, winnerWallet: null, winnerProbability: 0 }
+  let wheelState: WheelState = { open: false, spinning: false, rotationDeg: 0, rewardTierId: null, rewardProbability: 0, rewardBps: 0, rewardAmount: 0, rewardToken: '', error: null }
 
   const copyBtn = document.getElementById('copy-install-btn') as HTMLButtonElement | null
   const marketRoot = document.getElementById('market-root')
@@ -320,6 +342,20 @@ export default function mount() {
     cleanups.push(() => wheelModalMount?.remove())
   }
 
+  const fetchWalletSummary = async (wallet: string) => {
+    walletLoading = true
+    renderAll()
+    try {
+      const res = await fetch(`/api/wheel/me?wallet=${encodeURIComponent(wallet)}`)
+      walletSummary = await res.json()
+    } catch {
+      walletSummary = null
+    } finally {
+      walletLoading = false
+      renderAll()
+    }
+  }
+
   const connectWallet = async () => {
     const provider = window.solana
     if (!provider?.isPhantom) {
@@ -329,8 +365,84 @@ export default function mount() {
     try {
       const result = await provider.connect()
       connectedWallet = result.publicKey.toString()
-      renderAll()
+      await fetchWalletSummary(connectedWallet)
     } catch {}
+  }
+
+  const spinRealWheel = async () => {
+    const provider = window.solana
+    if (!provider?.isPhantom || !provider.signMessage || !connectedWallet) {
+      wheelState = { ...wheelState, error: 'Connect Phantom first.' }
+      renderAll()
+      return
+    }
+    if (!walletSummary) {
+      wheelState = { ...wheelState, error: 'Wallet summary unavailable.' }
+      renderAll()
+      return
+    }
+    if (walletSummary.spendable < walletSummary.wheelSpendAmount) {
+      wheelState = { ...wheelState, error: `Not enough spendable gravity. Need ${fmtPoints(walletSummary.wheelSpendAmount)}.` }
+      renderAll()
+      return
+    }
+
+    try {
+      wheelState = { ...wheelState, spinning: true, rewardTierId: null, rewardProbability: 0, rewardBps: 0, rewardAmount: 0, rewardToken: '', error: null }
+      renderAll()
+
+      const challengeRes = await fetch('/api/wheel/challenge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ wallet: connectedWallet }),
+      })
+      const challenge = await challengeRes.json()
+      if (!challengeRes.ok || !challenge.ok) throw new Error(challenge.error || 'Failed to create wheel challenge')
+
+      const signed = await provider.signMessage(encoder.encode(challenge.message), 'utf8')
+      const signature = bytesToBase64(signed.signature)
+
+      const spinRes = await fetch('/api/wheel/spin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ wallet: connectedWallet, challengeId: challenge.challengeId, signature }),
+      })
+      const spin = await spinRes.json()
+      if (!spinRes.ok || !spin.ok) throw new Error(spin.error || 'Failed to spin wheel')
+
+      const tiers = walletSummary.rewardTiers || []
+      const tier = tiers.find((entry) => entry.id === spin.reward.tier)
+      wheelState = {
+        ...wheelState,
+        spinning: true,
+        rotationDeg: getRewardRotation(tiers, spin.reward.tier, wheelState.rotationDeg),
+        rewardTierId: null,
+        rewardProbability: 0,
+        rewardBps: 0,
+        rewardAmount: 0,
+        rewardToken: spin.reward.token,
+        error: null,
+      }
+      renderAll()
+
+      setTimeout(async () => {
+        wheelState = {
+          ...wheelState,
+          spinning: false,
+          rewardTierId: spin.reward.tier,
+          rewardProbability: (tier?.probability || 0) * 100,
+          rewardBps: spin.reward.rewardBps,
+          rewardAmount: spin.reward.rewardAmount,
+          rewardToken: spin.reward.token,
+          error: null,
+        }
+        renderAll()
+        if (connectedWallet) await fetchWalletSummary(connectedWallet)
+      }, 5600)
+    } catch (error: any) {
+      wheelState = { ...wheelState, spinning: false, error: error?.message || 'Spin failed' }
+      renderAll()
+    }
   }
 
   const renderAll = () => {
@@ -339,7 +451,7 @@ export default function mount() {
       if (gravityLoading) {
         render(<div className="market-loading">Loading gravity dashboard…</div>, heroRoot)
       } else if (gravityData?.leaderboard?.length) {
-        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} expanded={heroExpanded} />, heroRoot)
+        render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} expanded={heroExpanded} />, heroRoot)
         const toggle = document.getElementById('toggle-hero-holders-btn') as HTMLButtonElement | null
         if (toggle) toggle.onclick = () => { heroExpanded = !heroExpanded; renderAll() }
       } else {
@@ -349,29 +461,27 @@ export default function mount() {
 
     const heroConnect = document.getElementById('hero-connect-wallet-btn') as HTMLButtonElement | null
     if (heroConnect) heroConnect.onclick = connectWallet
+    if (heroConnect) heroConnect.textContent = connectedWallet ? (walletLoading ? 'Refreshing wallet…' : 'Wallet Connected') : 'Connect Phantom'
+
     const heroSpin = document.getElementById('hero-spin-wheel-btn') as HTMLButtonElement | null
-    if (heroSpin) heroSpin.onclick = () => { wheelState = { ...wheelState, open: true }; renderAll() }
+    if (heroSpin) heroSpin.onclick = () => { wheelState = { ...wheelState, open: true, error: null }; renderAll() }
 
     if (wheelModalMount) {
-      const rows = gravityData?.leaderboard || []
-      if (wheelState.open && rows.length) {
+      const tiers = walletSummary?.rewardTiers || [
+        { id: 'dust', probability: 0.45, rewardBps: 5 },
+        { id: 'small', probability: 0.28, rewardBps: 10 },
+        { id: 'medium', probability: 0.15, rewardBps: 25 },
+        { id: 'large', probability: 0.08, rewardBps: 50 },
+        { id: 'mega', probability: 0.03, rewardBps: 100 },
+        { id: 'cosmic', probability: 0.01, rewardBps: 250 },
+      ]
+      if (wheelState.open) {
         const closeWheel = () => {
           if (wheelState.spinning) return
           wheelState = { ...wheelState, open: false }
           renderAll()
         }
-        const spinWheel = () => {
-          if (wheelState.spinning) return
-          const wheelRows = rows.slice(0, 12)
-          const winner = chooseWeightedWinner(wheelRows)
-          wheelState = { ...wheelState, spinning: true, winnerWallet: null, winnerProbability: 0, rotationDeg: getWinnerRotation(wheelRows, winner.row.wallet, wheelState.rotationDeg) }
-          renderAll()
-          setTimeout(() => {
-            wheelState = { ...wheelState, spinning: false, winnerWallet: winner.row.wallet, winnerProbability: winner.probability }
-            renderAll()
-          }, 5600)
-        }
-        render(<WheelModal rows={rows} state={wheelState} />, wheelModalMount)
+        render(<RewardWheelModal tiers={tiers} summary={walletSummary} state={wheelState} />, wheelModalMount)
         for (const id of ['wheel-close-btn', 'close-wheel-btn']) {
           const btn = document.getElementById(id) as HTMLButtonElement | null
           if (btn) btn.onclick = closeWheel
@@ -379,7 +489,7 @@ export default function mount() {
         const backdrop = document.getElementById('wheel-backdrop')
         if (backdrop) backdrop.onclick = (event) => { if (event.target === backdrop) closeWheel() }
         const spinBtn = document.getElementById('spin-wheel-btn') as HTMLButtonElement | null
-        if (spinBtn) spinBtn.onclick = spinWheel
+        if (spinBtn) spinBtn.onclick = spinRealWheel
       } else {
         render(null, wheelModalMount)
       }

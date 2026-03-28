@@ -349,6 +349,8 @@ export function getWheelWalletSummary(wallet: string) {
     pendingClaims: claims?.pendingClaims || 0,
     claimableAmount: claims?.claimableAmount || 0,
     wheelSpendAmount: WHEEL_SPEND_AMOUNT,
+    rewardToken: TREASURY_REWARD_TOKEN,
+    rewardTiers: WHEEL_TIERS,
     latestSpin,
   }
 }
