@@ -56,6 +56,17 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .gravity-dashboard-subline { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:16px; color:var(--text2); font-size:13px; }
 .gravity-hero-table-wrap { max-height:540px; overflow:auto; border:1px solid rgba(129,140,248,.14); border-radius:18px; }
 .active-wallet-row td { background:rgba(99,102,241,.10) !important; }
+.spins-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; position:relative; z-index:1; }
+.spins-card { background:rgba(17,17,40,.72); border:1px solid rgba(129,140,248,.16); border-radius:18px; padding:18px; }
+.spins-card-header h4 { font-size:18px; margin-top:2px; }
+.spins-empty { color:var(--text2); font-size:13px; }
+.spins-list { display:flex; flex-direction:column; gap:10px; }
+.spin-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 0; border-top:1px solid rgba(255,255,255,.05); }
+.spin-row:first-child { border-top:none; padding-top:0; }
+.spin-tier { font-weight:800; letter-spacing:.05em; }
+.spin-meta { color:var(--text2); font-size:12px; }
+.spin-reward { display:flex; flex-direction:column; align-items:flex-end; font-size:13px; color:var(--text2); }
+.spin-reward strong { color:var(--text); }
 .hero-badge { display:inline-block; background:#1e1e2e; border:1px solid #2e2e3e; padding:6px 16px; border-radius:20px; font-size:13px; color:#a1a1aa; margin-bottom:24px; }
 .hero h1 { font-size:clamp(36px,6vw,56px); font-weight:700; line-height:1.15; color:#f4f4f5; margin-bottom:20px; }
 .gradient-text { background:linear-gradient(135deg,#818cf8,#c084fc,#f472b6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
@@ -206,7 +217,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
   .gravity-hero-panel { min-height:auto; }
 }
 @media (max-width: 900px) {
-  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta,.wallet-summary-grid,.stack-pillars { grid-template-columns:1fr; }
+  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta,.wallet-summary-grid,.stack-pillars,.spins-grid { grid-template-columns:1fr; }
   .nav-links { flex-wrap:wrap; gap:12px; justify-content:flex-end; }
   .market-card-primary { grid-column:auto; }
   .market-token-row,.gravity-toolbar,.gravity-dashboard-subline { flex-direction:column; align-items:flex-start; }
