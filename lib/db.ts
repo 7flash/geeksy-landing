@@ -23,7 +23,21 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS market_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload_json TEXT NOT NULL,
+    captured_at INTEGER NOT NULL DEFAULT 0
+  );
 `)
+
+// Ensure stardust column exists on gravity_points
+try {
+  const cols = db.query(`PRAGMA table_info(gravity_points)`).all() as Array<{ name: string }>
+  if (!cols.some((c) => c.name === 'stardust')) {
+    db.exec(`ALTER TABLE gravity_points ADD COLUMN stardust REAL NOT NULL DEFAULT 0`)
+  }
+} catch {}
 
 export type GravityRow = {
   wallet: string
@@ -62,4 +76,28 @@ export function estimateTokenPriceUsd() {
 
   if (!estimates.length) return 0.000004
   return estimates[Math.floor(estimates.length / 2)]!
+}
+
+export function readLatestMarketSnapshot<T = any>() {
+  try {
+    const row = db.query(`
+      SELECT payload_json, captured_at
+      FROM market_snapshots
+      ORDER BY captured_at DESC
+      LIMIT 1
+    `).get() as { payload_json: string; captured_at: number } | null
+
+    if (!row?.payload_json) return null
+
+    return {
+      capturedAt: row.captured_at || 0,
+      payload: JSON.parse(row.payload_json) as T,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function writeMarketSnapshot(payload: unknown, capturedAt = Date.now()) {
+  db.query(`INSERT INTO market_snapshots (payload_json, captured_at) VALUES (?, ?)`).run(JSON.stringify(payload), capturedAt)
 }

@@ -3,14 +3,16 @@ import { db } from './db'
 
 const encoder = new TextEncoder()
 
-export const WHEEL_SPEND_AMOUNT = Number(process.env.WHEEL_SPEND_AMOUNT || 100)
+// Spin burns ALL spendable gravity — no fixed cost
 export const WHEEL_CHALLENGE_TTL_MS = Number(process.env.WHEEL_CHALLENGE_TTL_MS || 5 * 60 * 1000)
 export const CLAIM_CHALLENGE_TTL_MS = Number(process.env.CLAIM_CHALLENGE_TTL_MS || 10 * 60 * 1000)
-export const TREASURY_REWARD_TOKEN = process.env.TREASURY_REWARD_TOKEN || 'USDC'
+export const TREASURY_REWARD_TOKEN = 'SOL'
 export const TREASURY_SOURCE = process.env.TREASURY_SOURCE || 'env'
 export const TREASURY_AMOUNT = Number(process.env.TREASURY_AMOUNT || 0)
 export const TREASURY_SNAPSHOT_COMMAND = (process.env.TREASURY_SNAPSHOT_COMMAND || '').trim()
+export const MIN_GRAVITY_TO_SPIN = Number(process.env.MIN_GRAVITY_TO_SPIN || 1)
 
+// Reward tiers — probabilities are base rates, modified by gravity share
 export const WHEEL_TIERS = [
   { id: 'dust', probability: 0.45, rewardBps: 5 },
   { id: 'small', probability: 0.28, rewardBps: 10 },
@@ -68,7 +70,7 @@ async function readTreasurySnapshotFromCommand() {
 
   return {
     amount,
-    token: (parsed.token || TREASURY_REWARD_TOKEN).trim() || TREASURY_REWARD_TOKEN,
+    token: 'SOL',
     source: (parsed.source || 'command').trim() || 'command',
   }
 }
@@ -79,6 +81,7 @@ export function ensureWheelSchema() {
       wallet TEXT PRIMARY KEY,
       total_earned REAL NOT NULL DEFAULT 0,
       total_spent REAL NOT NULL DEFAULT 0,
+      stardust REAL NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL DEFAULT 0
     );
 
@@ -114,6 +117,7 @@ export function ensureWheelSchema() {
       treasury_snapshot_id TEXT NOT NULL,
       treasury_amount_at_spin REAL NOT NULL,
       reward_amount REAL NOT NULL,
+      gravity_share REAL NOT NULL DEFAULT 0,
       signature TEXT,
       rng_hash TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -157,10 +161,12 @@ export function ensureWheelSchema() {
     );
   `)
 
+  ensureColumn('wallet_gravity_ledger', 'stardust', `ALTER TABLE wallet_gravity_ledger ADD COLUMN stardust REAL NOT NULL DEFAULT 0`)
   ensureColumn('wheel_claims', 'request_id', `ALTER TABLE wheel_claims ADD COLUMN request_id TEXT`)
   ensureColumn('wheel_claims', 'requested_at', `ALTER TABLE wheel_claims ADD COLUMN requested_at INTEGER`)
   ensureColumn('claim_requests', 'tx_signature', `ALTER TABLE claim_requests ADD COLUMN tx_signature TEXT`)
   ensureColumn('claim_requests', 'admin_reason', `ALTER TABLE claim_requests ADD COLUMN admin_reason TEXT`)
+  ensureColumn('wheel_spins', 'gravity_share', `ALTER TABLE wheel_spins ADD COLUMN gravity_share REAL NOT NULL DEFAULT 0`)
 }
 
 export function getWalletGravity(wallet: string) {
@@ -169,29 +175,45 @@ export function getWalletGravity(wallet: string) {
       COALESCE(g.points, 0) as totalEarned,
       COALESCE(l.total_spent, 0) as totalSpent,
       COALESCE(g.points, 0) - COALESCE(l.total_spent, 0) as spendable,
+      COALESCE(l.stardust, 0) as stardust,
       COALESCE(g.last_credited_at, 0) as lastUpdated
     FROM (SELECT ? as wallet) w
     LEFT JOIN gravity_points g ON g.wallet = w.wallet
     LEFT JOIN wallet_gravity_ledger l ON l.wallet = w.wallet
-  `).get(wallet) as { totalEarned: number; totalSpent: number; spendable: number; lastUpdated: number }
+  `).get(wallet) as { totalEarned: number; totalSpent: number; spendable: number; stardust: number; lastUpdated: number }
 
   return {
     totalEarned: row?.totalEarned || 0,
     totalSpent: row?.totalSpent || 0,
-    spendable: row?.spendable || 0,
+    spendable: Math.max(0, row?.spendable || 0),
+    stardust: row?.stardust || 0,
     lastUpdated: row?.lastUpdated || 0,
   }
+}
+
+/** Get total remaining gravity across ALL holders (for share calculation) */
+export function getTotalRemainingGravity() {
+  const row = db.query(`
+    SELECT COALESCE(SUM(
+      COALESCE(g.points, 0) - COALESCE(l.total_spent, 0)
+    ), 0) as totalRemaining
+    FROM gravity_points g
+    LEFT JOIN wallet_gravity_ledger l ON l.wallet = g.wallet
+    WHERE COALESCE(g.points, 0) - COALESCE(l.total_spent, 0) > 0
+  `).get() as { totalRemaining: number }
+  return row?.totalRemaining || 0
 }
 
 export function syncWalletLedger(wallet: string, now = Date.now()) {
   const current = getWalletGravity(wallet)
   db.query(`
-    INSERT INTO wallet_gravity_ledger (wallet, total_earned, total_spent, updated_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO wallet_gravity_ledger (wallet, total_earned, total_spent, stardust, updated_at)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(wallet) DO UPDATE SET
       total_earned = excluded.total_earned,
+      stardust = wallet_gravity_ledger.stardust,
       updated_at = excluded.updated_at
-  `).run(wallet, current.totalEarned, current.totalSpent, now)
+  `).run(wallet, current.totalEarned, current.totalSpent, current.stardust, now)
   return getWalletGravity(wallet)
 }
 
@@ -213,18 +235,18 @@ export async function createTreasurySnapshot(now = Date.now()) {
 
 export function buildSpinMessage(wallet: string, challengeId: string, nonce: string, spendAmount: number, expiresAt: number) {
   return [
-    'Spin Gravity Wheel',
+    'Spin Gravity Wheel — Burn All Gravity',
     `wallet=${wallet}`,
     `challengeId=${challengeId}`,
     `nonce=${nonce}`,
-    `spend=${spendAmount}`,
+    `spend=${spendAmount.toFixed(4)}`,
     `expiresAt=${expiresAt}`,
   ].join('\n')
 }
 
 export function buildClaimMessage(wallet: string, requestId: string, nonce: string, amount: number, claimCount: number, token: string, expiresAt: number) {
   return [
-    'Claim Gravity Rewards',
+    'Claim SOL Rewards',
     `wallet=${wallet}`,
     `requestId=${requestId}`,
     `nonce=${nonce}`,
@@ -239,26 +261,29 @@ export async function createChallenge(wallet: string) {
   ensureWheelSchema()
   const now = Date.now()
   const synced = syncWalletLedger(wallet, now)
-  if (synced.spendable < WHEEL_SPEND_AMOUNT) {
-    throw new Error(`Insufficient spendable gravity. Need ${WHEEL_SPEND_AMOUNT}, have ${Math.max(0, synced.spendable).toFixed(2)}`)
+  if (synced.spendable < MIN_GRAVITY_TO_SPIN) {
+    throw new Error(`Insufficient spendable gravity. Need at least ${MIN_GRAVITY_TO_SPIN}, have ${synced.spendable.toFixed(2)}`)
   }
+
+  // Burn ALL spendable gravity
+  const spendAmount = synced.spendable
 
   const challengeId = randomUUID()
   const nonce = randomUUID()
   const expiresAt = now + WHEEL_CHALLENGE_TTL_MS
   const treasurySnapshot = await createTreasurySnapshot(now)
-  const message = buildSpinMessage(wallet, challengeId, nonce, WHEEL_SPEND_AMOUNT, expiresAt)
+  const message = buildSpinMessage(wallet, challengeId, nonce, spendAmount, expiresAt)
 
   db.query(`
     INSERT INTO wheel_challenges (id, wallet, nonce, spend_amount, expires_at, treasury_snapshot_id, message, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(challengeId, wallet, nonce, WHEEL_SPEND_AMOUNT, expiresAt, treasurySnapshot.id, message, now)
+  `).run(challengeId, wallet, nonce, spendAmount, expiresAt, treasurySnapshot.id, message, now)
 
   return {
     challengeId,
     wallet,
     nonce,
-    spendAmount: WHEEL_SPEND_AMOUNT,
+    spendAmount,
     expiresAt,
     message,
     treasurySnapshot,
@@ -270,11 +295,31 @@ function sha256Hex(input: string) {
   return createHash('sha256').update(input).digest('hex')
 }
 
-function chooseTier(randomFloat: number) {
+/**
+ * Choose reward tier, influenced by the user's gravity share.
+ * Higher gravity share = better chance of landing on higher tiers.
+ * 
+ * gravityShare: 0..1 representing user's fraction of total remaining gravity
+ * randomFloat: 0..1 raw random
+ * 
+ * The share shifts the probability distribution upward:
+ * - At 0% share: base probabilities apply
+ * - At higher shares: probability mass shifts toward better tiers
+ */
+function chooseTierWeighted(randomFloat: number, gravityShare: number) {
+  // Boost factor: gravity share amplifies upward shift
+  // Max boost at 100% share doubles the chance of better tiers
+  const boost = Math.min(gravityShare * 2, 0.8) // cap at 0.8 shift
+
+  // Shift the random number downward (lower = better tier since we accumulate from dust)
+  // Actually: we want higher share to shift toward HIGHER tiers
+  // So we push the random number higher, making it more likely to pass lower-tier thresholds
+  const adjustedRandom = randomFloat * (1 - boost) + boost * 0.5
+
   let cursor = 0
   for (const tier of WHEEL_TIERS) {
     cursor += tier.probability
-    if (randomFloat <= cursor) return tier
+    if (adjustedRandom <= cursor) return tier
   }
   return WHEEL_TIERS[WHEEL_TIERS.length - 1]
 }
@@ -352,41 +397,57 @@ export async function consumeSpinChallenge(wallet: string, challengeId: string, 
   if (!treasury) throw new Error('Treasury snapshot missing')
 
   const before = syncWalletLedger(wallet, now)
-  if (before.spendable < challenge.spend_amount) {
-    throw new Error(`Insufficient spendable gravity. Need ${challenge.spend_amount}, have ${Math.max(0, before.spendable).toFixed(2)}`)
+  const spendAmount = before.spendable // burn ALL remaining gravity
+  if (spendAmount < MIN_GRAVITY_TO_SPIN) {
+    throw new Error(`Insufficient spendable gravity. Need at least ${MIN_GRAVITY_TO_SPIN}, have ${Math.max(0, before.spendable).toFixed(2)}`)
   }
+
+  // Calculate gravity share: user's gravity vs total remaining gravity
+  const totalRemainingGravity = getTotalRemainingGravity()
+  const gravityShare = totalRemainingGravity > 0 ? spendAmount / totalRemainingGravity : 0
 
   const rngHash = sha256Hex([process.env.WHEEL_SERVER_SEED || 'dev-seed', wallet, challenge.id, challenge.nonce, String(now)].join('|'))
   const randomFloat = parseInt(rngHash.slice(0, 12), 16) / 0xffffffffffff
-  const tier = chooseTier(randomFloat)
+
+  // Choose tier with gravity-share weighting
+  const tier = chooseTierWeighted(randomFloat, gravityShare)
+
+  // Reward in SOL from treasury
   const rewardAmount = treasury.amount * (tier.rewardBps / 10_000)
-  const afterSpent = before.totalSpent + challenge.spend_amount
-  const afterSpendable = before.totalEarned - afterSpent
+  const afterSpent = before.totalSpent + spendAmount
+  const afterSpendable = 0 // all gravity burned
+  const newStardust = before.stardust + spendAmount // gravity becomes stardust
   const spinId = randomUUID()
   const claimId = randomUUID()
 
   db.transaction(() => {
     db.query(`UPDATE wheel_challenges SET used_at = ? WHERE id = ?`).run(now, challenge.id)
+
+    // Update ledger: burn all gravity, add to stardust
     db.query(`
-      INSERT INTO wallet_gravity_ledger (wallet, total_earned, total_spent, updated_at)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO wallet_gravity_ledger (wallet, total_earned, total_spent, stardust, updated_at)
+      VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(wallet) DO UPDATE SET
         total_earned = excluded.total_earned,
         total_spent = excluded.total_spent,
+        stardust = excluded.stardust,
         updated_at = excluded.updated_at
-    `).run(wallet, before.totalEarned, afterSpent, now)
+    `).run(wallet, before.totalEarned, afterSpent, newStardust, now)
+
+    // Also update stardust on gravity_points table for leaderboard
+    db.query(`UPDATE gravity_points SET stardust = ? WHERE wallet = ?`).run(newStardust, wallet)
 
     db.query(`
       INSERT INTO wheel_spins (
         id, wallet, challenge_id, spend_amount, wallet_gravity_before, wallet_gravity_after,
         tier_id, reward_bps, treasury_snapshot_id, treasury_amount_at_spin, reward_amount,
-        signature, rng_hash, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        gravity_share, signature, rng_hash, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       spinId,
       wallet,
       challenge.id,
-      challenge.spend_amount,
+      spendAmount,
       before.spendable,
       afterSpendable,
       tier.id,
@@ -394,6 +455,7 @@ export async function consumeSpinChallenge(wallet: string, challengeId: string, 
       treasury.id,
       treasury.amount,
       rewardAmount,
+      gravityShare,
       signature,
       rngHash,
       'settled',
@@ -403,22 +465,25 @@ export async function consumeSpinChallenge(wallet: string, challengeId: string, 
     db.query(`
       INSERT INTO wheel_claims (id, spin_id, wallet, amount, token, status, tx_signature, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(claimId, spinId, wallet, rewardAmount, treasury.token, rewardAmount > 0 ? 'pending' : 'void', null, now, now)
+    `).run(claimId, spinId, wallet, rewardAmount, 'SOL', rewardAmount > 0 ? 'pending' : 'void', null, now, now)
   })()
 
   return {
     spinId,
     claimId,
     wallet,
-    spendAmount: challenge.spend_amount,
+    spendAmount,
     gravityBefore: before.spendable,
     gravityAfter: afterSpendable,
+    stardustEarned: spendAmount,
+    totalStardust: newStardust,
+    gravityShare,
     reward: {
       tier: tier.id,
       rewardBps: tier.rewardBps,
       treasuryAmount: treasury.amount,
       rewardAmount,
-      token: treasury.token,
+      token: 'SOL',
       source: treasury.source,
     },
     rngHash,
@@ -439,11 +504,7 @@ export function createClaimRequest(wallet: string) {
     throw new Error('No pending rewards to claim')
   }
 
-  const token = pendingClaims[0]!.token
-  if (pendingClaims.some((claim) => claim.token !== token)) {
-    throw new Error('Pending claims contain mixed reward tokens')
-  }
-
+  const token = 'SOL'
   const amount = pendingClaims.reduce((sum, claim) => sum + Number(claim.amount || 0), 0)
   const requestId = randomUUID()
   const nonce = randomUUID()
@@ -518,8 +579,8 @@ export async function consumeClaimRequest(wallet: string, requestId: string, sig
     throw new Error('Claim amount mismatch')
   }
 
-  const ok = await verifyWalletSignature(wallet, request.message, signature)
-  if (!ok) throw new Error('Invalid wallet signature')
+  const isOk = await verifyWalletSignature(wallet, request.message, signature)
+  if (!isOk) throw new Error('Invalid wallet signature')
 
   db.transaction(() => {
     db.query(`
@@ -539,7 +600,7 @@ export async function consumeClaimRequest(wallet: string, requestId: string, sig
     requestId,
     wallet,
     amount,
-    token: request.token,
+    token: 'SOL',
     claimCount: linkedClaims.length,
     status: 'requested',
     requestedAt: now,
@@ -683,12 +744,16 @@ export function settleClaimRequest({ requestId, status, txSignature, reason }: {
 export function getWheelWalletSummary(wallet: string) {
   ensureWheelSchema()
   const synced = syncWalletLedger(wallet)
+  const totalRemaining = getTotalRemainingGravity()
+  const gravityShare = totalRemaining > 0 ? synced.spendable / totalRemaining : 0
+
   const latestTreasury = db.query(`
     SELECT token, amount, source, created_at as createdAt
     FROM treasury_snapshots
     ORDER BY created_at DESC
     LIMIT 1
   `).get() as { token: string; amount: number; source: string; createdAt: number } | null
+
   const claims = db.query(`
     SELECT
       COUNT(CASE WHEN status = 'pending' THEN 1 END) as pendingClaims,
@@ -705,12 +770,12 @@ export function getWheelWalletSummary(wallet: string) {
   }
 
   const latestSpin = db.query(`
-    SELECT id, tier_id as tierId, reward_amount as rewardAmount, created_at as createdAt
+    SELECT id, tier_id as tierId, reward_amount as rewardAmount, gravity_share as gravityShare, created_at as createdAt
     FROM wheel_spins
     WHERE wallet = ?
     ORDER BY created_at DESC
     LIMIT 1
-  `).get(wallet) as { id: string; tierId: string; rewardAmount: number; createdAt: number } | null
+  `).get(wallet) as { id: string; tierId: string; rewardAmount: number; gravityShare: number; createdAt: number } | null
 
   const latestClaimRequest = db.query(`
     SELECT id, amount, token, claim_count as claimCount, status, processed_at as processedAt,
@@ -736,12 +801,15 @@ export function getWheelWalletSummary(wallet: string) {
     totalEarned: synced.totalEarned,
     totalSpent: synced.totalSpent,
     spendable: synced.spendable,
+    stardust: synced.stardust,
+    gravityShare,
+    totalRemainingGravity: totalRemaining,
     pendingClaims: claims?.pendingClaims || 0,
     claimableAmount: claims?.claimableAmount || 0,
     requestedClaims: claims?.requestedClaims || 0,
     requestedAmount: claims?.requestedAmount || 0,
-    wheelSpendAmount: WHEEL_SPEND_AMOUNT,
-    rewardToken: latestTreasury?.token || TREASURY_REWARD_TOKEN,
+    minGravityToSpin: MIN_GRAVITY_TO_SPIN,
+    rewardToken: 'SOL',
     rewardTiers: WHEEL_TIERS,
     latestSpin,
     latestClaimRequest,

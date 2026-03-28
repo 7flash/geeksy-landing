@@ -1,21 +1,211 @@
 import { Head } from 'melina/server'
+import { db, estimateTokenPriceUsd, readLatestMarketSnapshot } from '../lib/db'
+import { getWalletDisplay, getWalletLabel } from '../lib/gksy'
+
+type MarketSnapshot = {
+  ok: boolean
+  token?: { address: string; symbol: string; name: string }
+  pair?: {
+    dexId: string
+    pairAddress: string
+    url: string
+    priceUsd: number
+    priceNative: number
+    fdv: number
+    marketCap: number
+    liquidityUsd: number
+    volume24h: number
+    buys24h: number
+    sells24h: number
+    changeM5: number
+    changeH1: number
+    changeH6: number
+    changeH24: number
+  }
+  capturedAt?: number
+}
+
+type GravitySnapshot = {
+  leaderboard: Array<{
+    rank: number
+    wallet: string
+    walletShort: string
+    walletLabel: string | null
+    points: number
+    stardust: number
+    remainingGravity: number
+    streakMinutes: number
+    balance: number
+    usdPerMinute: number
+    lastCreditedAt: number
+  }>
+  stats: {
+    totalHolders: number
+    totalPoints: number
+    totalStardust: number
+    totalRemainingGravity: number
+    lastUpdated: number
+    activeScoredHolders: number
+  }
+  priceUsd: number
+  scoringRule: string
+}
+
+function fmtUsd(n: number) {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}K`
+  if (n >= 1) return `$${n.toFixed(2)}`
+  return `$${n.toFixed(6)}`
+}
+
+function fmtPct(n: number) {
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(2)}%`
+}
+
+function fmtPoints(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`
+  return n.toFixed(2)
+}
+
+function fmtTokenAmount(n: number) {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`
+  return n.toFixed(2)
+}
+
+function fmtSol(n: number) {
+  if (n >= 1000) return `${(n / 1000).toFixed(2)}K SOL`
+  if (n >= 1) return `${n.toFixed(4)} SOL`
+  if (n >= 0.0001) return `${n.toFixed(6)} SOL`
+  return `${n.toFixed(8)} SOL`
+}
+
+function getLatestMarketSnapshot(): MarketSnapshot | null {
+  return readLatestMarketSnapshot<MarketSnapshot>()?.payload || null
+}
+
+function getGravitySnapshot(limit = 30): GravitySnapshot {
+  const market = getLatestMarketSnapshot()
+  const priceUsd = market?.pair?.priceUsd || estimateTokenPriceUsd()
+
+  // Ensure stardust column
+  try {
+    const cols = db.query(`PRAGMA table_info(gravity_points)`).all() as Array<{ name: string }>
+    if (!cols.some((c) => c.name === 'stardust')) {
+      db.exec(`ALTER TABLE gravity_points ADD COLUMN stardust REAL NOT NULL DEFAULT 0`)
+    }
+  } catch {}
+
+  const rows = db.query(`
+    SELECT g.wallet, g.points, g.streak_minutes, g.last_credited_at,
+           COALESCE(g.stardust, 0) as stardust,
+           h.balance,
+           COALESCE(l.total_spent, 0) as totalSpent,
+           COALESCE(g.points, 0) - COALESCE(l.total_spent, 0) as remainingGravity
+    FROM gravity_points g
+    LEFT JOIN holder_snapshots h ON h.wallet = g.wallet
+    LEFT JOIN wallet_gravity_ledger l ON l.wallet = g.wallet
+    ORDER BY COALESCE(g.stardust, 0) DESC, g.points DESC
+    LIMIT ?
+  `).all(limit) as Array<{
+    wallet: string
+    points: number
+    streak_minutes: number
+    last_credited_at: number
+    stardust: number
+    balance: number | null
+    totalSpent: number
+    remainingGravity: number
+  }>
+
+  const stats = db.query(`
+    SELECT 
+      COUNT(*) as totalHolders,
+      COALESCE(SUM(points), 0) as totalPoints,
+      COALESCE(SUM(stardust), 0) as totalStardust,
+      COALESCE(MAX(last_credited_at), 0) as lastUpdated,
+      COALESCE(SUM(CASE WHEN streak_minutes > 0 THEN 1 ELSE 0 END), 0) as activeScoredHolders
+    FROM gravity_points
+  `).get() as { totalHolders: number; totalPoints: number; totalStardust: number; lastUpdated: number; activeScoredHolders: number }
+
+  const totalRemaining = db.query(`
+    SELECT COALESCE(SUM(COALESCE(g.points, 0) - COALESCE(l.total_spent, 0)), 0) as total
+    FROM gravity_points g
+    LEFT JOIN wallet_gravity_ledger l ON l.wallet = g.wallet
+    WHERE COALESCE(g.points, 0) - COALESCE(l.total_spent, 0) > 0
+  `).get() as { total: number }
+
+  return {
+    leaderboard: rows.map((row, i) => ({
+      rank: i + 1,
+      wallet: row.wallet,
+      walletShort: getWalletDisplay(row.wallet),
+      walletLabel: getWalletLabel(row.wallet),
+      points: row.points,
+      stardust: row.stardust,
+      remainingGravity: Math.max(0, row.remainingGravity),
+      streakMinutes: row.streak_minutes,
+      balance: row.balance || 0,
+      usdPerMinute: priceUsd > 0 && row.balance ? row.balance * priceUsd : 0,
+      lastCreditedAt: row.last_credited_at,
+    })),
+    stats: {
+      ...stats,
+      totalRemainingGravity: totalRemaining?.total || 0,
+    },
+    priceUsd,
+    scoringRule: 'Each minute, gravity += GKSY balance × USD price. Spinning burns all gravity into stardust and wins SOL from treasury.',
+  }
+}
+
+function MarketFallback({ data }: { data: MarketSnapshot | null }) {
+  if (!data?.ok || !data.pair || !data.token) return <div className="market-loading">Market snapshot will appear after the first live refresh.</div>
+  const p = data.pair
+  return <div className="market-grid">
+    <div className="market-card market-card-primary"><div className="market-card-label">Token</div><div className="market-token-row"><div><h3>{data.token.name} ({data.token.symbol})</h3><p className="market-muted">{data.token.address}</p></div><a href={p.url} target="_blank" rel="noopener" className="btn-primary">View on Dexscreener</a></div></div>
+    <div className="market-card"><div className="market-card-label">Price</div><div className="market-big">{fmtUsd(p.priceUsd)}</div><div className={`market-change ${p.changeH24 >= 0 ? 'pos' : 'neg'}`}>24h {fmtPct(p.changeH24)}</div></div>
+    <div className="market-card"><div className="market-card-label">Liquidity</div><div className="market-big">{fmtUsd(p.liquidityUsd)}</div><div className="market-muted">DEX: {p.dexId}</div></div>
+    <div className="market-card"><div className="market-card-label">FDV</div><div className="market-big">{fmtUsd(p.fdv)}</div><div className="market-muted">Market cap {fmtUsd(p.marketCap)}</div></div>
+    <div className="market-card"><div className="market-card-label">24h Volume</div><div className="market-big">{fmtUsd(p.volume24h)}</div><div className="market-muted">Buys {p.buys24h} · Sells {p.sells24h}</div></div>
+    <div className="market-card"><div className="market-card-label">Momentum</div><div className="market-mini-grid"><span className={p.changeM5 >= 0 ? 'pos' : 'neg'}>5m {fmtPct(p.changeM5)}</span><span className={p.changeH1 >= 0 ? 'pos' : 'neg'}>1h {fmtPct(p.changeH1)}</span><span className={p.changeH6 >= 0 ? 'pos' : 'neg'}>6h {fmtPct(p.changeH6)}</span><span className={p.changeH24 >= 0 ? 'pos' : 'neg'}>24h {fmtPct(p.changeH24)}</span></div></div>
+  </div>
+}
+
+function GravityFallback({ data }: { data: GravitySnapshot }) {
+  if (!data.leaderboard.length) return <div className="market-loading">Gravity snapshot will appear after the first scoring cycle.</div>
+  return <div className="gravity-dashboard-card cosmic-dashboard-card">
+    <div className="gravity-dashboard-header"><div><div className="market-card-label">Cosmic Leaderboard</div><h3>Stardust &amp; Gravity</h3></div><div className="gravity-wallet-state"><span>SSR snapshot</span></div></div>
+    <div className="wallet-summary-grid wallet-summary-grid-ssr">
+      <div className="wallet-summary-card summary-stardust"><div className="market-card-label">Total Stardust</div><div className="wallet-summary-value stardust-value">✦ {fmtPoints(data.stats.totalStardust)}</div><p>Lifetime gravity burned by all holders through wheel spins.</p></div>
+      <div className="wallet-summary-card summary-gravity"><div className="market-card-label">Total Gravity</div><div className="wallet-summary-value gravity-value">⬡ {fmtPoints(data.stats.totalRemainingGravity)}</div><p>Remaining gravity across all holders, available to spin.</p></div>
+      <div className="wallet-summary-card"><div className="market-card-label">Scored Holders</div><div className="wallet-summary-value">{data.stats.activeScoredHolders}</div><p>Wallets earning gravity from live balance × USD price.</p></div>
+      <div className="wallet-summary-card"><div className="market-card-label">Current Price</div><div className="wallet-summary-value">{fmtUsd(data.priceUsd)}</div><p>{data.scoringRule}</p></div>
+    </div>
+    <div className="gravity-hero-table-wrap"><table className="holders-table gravity-hero-table"><thead><tr><th>#</th><th>Wallet</th><th>✦ Stardust</th><th>⬡ Gravity</th><th>Balance</th><th>$/min</th></tr></thead><tbody>{data.leaderboard.map((row) => <tr key={row.wallet}><td>{row.rank}</td><td><code>{row.walletShort}</code></td><td className="stardust-cell">{fmtPoints(row.stardust)}</td><td className="gravity-cell">{fmtPoints(row.remainingGravity)}</td><td>{fmtTokenAmount(row.balance)}</td><td>{fmtUsd(row.usdPerMinute)}</td></tr>)}</tbody></table></div>
+  </div>
+}
 
 export default function LandingPage() {
+  const marketSnapshot = getLatestMarketSnapshot()
+  const gravitySnapshot = getGravitySnapshot(30)
   return (
     <>
       <Head>
-        <title>Geeksy — Your AI that actually does things</title>
-        <meta name="description" content="Self-hosted AI assistant that writes code, runs scripts, schedules tasks, searches the web, and manages your automation — all from one interface." />
-        <meta property="og:title" content="Geeksy — Your AI that actually does things" />
-        <meta property="og:description" content="Self-hosted AI assistant with autonomous execution. Chat → Code → Schedule → Deploy." />
+        <title>Geeksy — Hold GKSY. Earn Gravity. Win SOL.</title>
+        <meta name="description" content="Hold GKSY tokens, accumulate gravity every minute, spin the cosmic wheel to win SOL from the treasury. Gravity burns into stardust — climb the lifetime leaderboard." />
+        <meta property="og:title" content="Geeksy — Hold GKSY. Earn Gravity. Win SOL." />
+        <meta property="og:description" content="Accumulate gravity by holding GKSY. Spin the wheel to burn gravity into stardust and win SOL. Top stardust holders get the Geeksy smart speaker." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://geeksy.xyz" />
         <meta property="og:image" content="https://geeksy.xyz/api/og/spin/default" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Geeksy — Your AI that actually does things" />
-        <meta name="twitter:description" content="Self-hosted AI assistant with autonomous execution. Chat → Code → Schedule → Deploy." />
+        <meta name="twitter:title" content="Geeksy — Hold GKSY. Earn Gravity. Win SOL." />
+        <meta name="twitter:description" content="Accumulate gravity by holding GKSY. Spin the wheel to burn gravity into stardust and win SOL." />
         <meta name="twitter:image" content="https://geeksy.xyz/api/og/spin/default" />
       </Head>
       <main className="landing-shell">
@@ -25,12 +215,9 @@ export default function LandingPage() {
             <div className="nav-links">
               <a href="#gravity-story">Gravity</a>
               <a href="#market">GKSY</a>
-              <a href="#problem">Problem</a>
-              <a href="#jsx-ai">jsx-ai</a>
-              <a href="#agent">smart-agent</a>
-              <a href="#geeksy">geeksy</a>
-              <a href="#hardware">hardware</a>
-              <a href="#network">network</a>
+              <a href="#how-it-works">How it Works</a>
+              <a href="#stardust-prizes">Prizes</a>
+              <a href="#stack">Stack</a>
               <a href="https://github.com/7flash/geeksy" target="_blank" rel="noopener">GitHub</a>
               <a href="https://app.geeksy.xyz" className="btn-primary">Open App →</a>
             </div>
@@ -38,147 +225,82 @@ export default function LandingPage() {
 
           <section className="hero gravity-hero" id="gravity-story">
             <div className="gravity-hero-copy">
-              <div className="hero-badge">Cosmic Gravity · Wallet-Native · Live</div>
-              <h1>Own GKSY.<br /><span className="gradient-text">Accumulate gravity.</span></h1>
-              <p className="hero-sub">Gravity score follows one simple rule: <code>gravity += current GKSY balance × current USD price</code> every minute. Connect Phantom, see where you rank, and spin the cosmic wheel weighted by real gravity.</p>
+              <div className="hero-badge">Hold GKSY · Earn Gravity · Win SOL</div>
+              <h1>Hold GKSY.<br /><span className="gradient-text">Win SOL.</span></h1>
+              <p className="hero-sub">Every minute you hold GKSY tokens, you earn <strong>gravity</strong>. Connect your Phantom wallet and spin the cosmic wheel to <strong>burn all your gravity into stardust</strong> and win <strong>SOL from the treasury</strong>. The more gravity you have relative to other holders, the better your odds.</p>
               <div className="gravity-hero-actions">
                 <button className="btn-hero" id="hero-connect-wallet-btn">Connect Phantom</button>
-                <button className="wheel-secondary-btn" id="hero-spin-wheel-btn">Spin the Wheel</button>
+                <button className="btn-hero btn-spin-hero" id="hero-spin-wheel-btn">🎰 Spin the Wheel</button>
               </div>
               <div className="gravity-formula-card">
                 <div className="market-card-label">How gravity accrues</div>
                 <div className="gravity-formula">gravity += balance × priceUsd</div>
-                <p>Updated every minute from live GKSY holder balances and current market price.</p>
+                <p>Updated every minute. Spinning burns all gravity → stardust + SOL prize.</p>
+              </div>
+              <div className="hero-stats-row" id="hero-wallet-cards">
+                <div className="hero-stat-card"><div className="hero-stat-label">⬡ Your Gravity</div><div className="hero-stat-value" id="hero-gravity-val">—</div></div>
+                <div className="hero-stat-card"><div className="hero-stat-label">✦ Your Stardust</div><div className="hero-stat-value" id="hero-stardust-val">—</div></div>
+                <div className="hero-stat-card"><div className="hero-stat-label">🏆 Claimable SOL</div><div className="hero-stat-value" id="hero-claimable-val">—</div></div>
               </div>
             </div>
-            <div className="gravity-hero-panel" id="gravity-hero-root" />
+            <div className="gravity-hero-panel" id="gravity-hero-root"><GravityFallback data={gravitySnapshot} /></div>
           </section>
         </div>
       </main>
 
+      <section className="section section-how-it-works" id="how-it-works">
+        <div className="section-label">The Gravity Game</div>
+        <h2>Hold. Accumulate. Spin. Win.</h2>
+        <p className="section-desc">A simple game loop: hold GKSY tokens, earn gravity every minute, spin the wheel to convert gravity into stardust and win SOL from the treasury.</p>
+        <div className="how-steps">
+          <div className="how-step"><div className="how-step-num">1</div><div><h3>Hold GKSY</h3><p>Buy and hold GKSY tokens in your Phantom wallet. Every minute, gravity accrues based on your token balance × current USD price.</p></div></div>
+          <div className="how-step"><div className="how-step-num">2</div><div><h3>Accumulate Gravity</h3><p>Watch your gravity grow minute by minute. The more GKSY you hold and the longer you hold, the more gravity you accumulate.</p></div></div>
+          <div className="how-step"><div className="how-step-num">3</div><div><h3>Spin the Wheel</h3><p>When you're ready, sign a message with Phantom to spin. <strong>All your gravity burns</strong> — converted into permanent stardust. The wheel determines your SOL prize from the treasury.</p></div></div>
+          <div className="how-step"><div className="how-step-num">4</div><div><h3>Win SOL</h3><p>Your prize is a percentage of available SOL in the treasury. The more gravity you burn relative to all other holders, the better your odds of hitting bigger tiers.</p></div></div>
+          <div className="how-step"><div className="how-step-num">5</div><div><h3>Claim & Repeat</h3><p>Claim your SOL winnings with another signed message. Then keep holding — gravity immediately starts accumulating again for your next spin.</p></div></div>
+        </div>
+        <div className="gravity-vs-stardust">
+          <div className="gvs-card gvs-gravity"><div className="gvs-icon">⬡</div><h3>Gravity</h3><p>Current balance earned by holding GKSY. Burns completely when you spin the wheel. Converts to redeemable SOL from treasury + stardust.</p></div>
+          <div className="gvs-arrow">→</div>
+          <div className="gvs-card gvs-stardust"><div className="gvs-icon">✦</div><h3>Stardust</h3><p>Permanent. Lifetime accumulation of burned gravity. Leaderboard sorted by stardust. Top stardust holders get special prizes like the Geeksy smart speaker.</p></div>
+        </div>
+      </section>
+
+      <section className="section section-prizes" id="stardust-prizes">
+        <div className="section-label">Stardust Rewards</div>
+        <h2>Top stardust holders get real prizes</h2>
+        <p className="section-desc">The stardust leaderboard isn't just for bragging rights. Top lifetime stardust holders will receive special physical prizes.</p>
+        <div className="prize-grid">
+          <div className="prize-card prize-card-main"><div className="prize-icon">🔊</div><h3>Geeksy Smart Speaker</h3><p>Our custom-built AI smart speaker with T527 SoC, FPGA, 4-mic array — runs AI locally, no cloud required. Top stardust holders will receive one before anyone else.</p></div>
+          <div className="prize-card"><div className="prize-icon">🎁</div><h3>Exclusive Merch</h3><p>Limited edition Geeksy gear for top leaderboard positions.</p></div>
+          <div className="prize-card"><div className="prize-icon">⚡</div><h3>Early Access</h3><p>Priority access to new features, beta programs, and Geeksy hardware drops.</p></div>
+        </div>
+      </section>
+
       <section className="section section-bridge" id="market">
-        <div className="section-label">From gravity to product</div>
-        <h2>The gravity game is the front door.<br />Geeksy is the universe behind it.</h2>
-        <p className="section-desc">Gravity turns holding into participation. But Geeksy itself is much bigger: a local-first AI system, autonomous agent runtime, composable LLM toolkit, and eventually a hardware + decentralized inference ecosystem. This section bridges the token mechanic with the product stack below.</p>
-        <div className="bridge-grid">
-          <div className="bridge-card bridge-card-primary">
-            <div className="market-card-label">What visitors should understand first</div>
-            <h3>Own GKSY → earn gravity → spin for treasury rewards</h3>
-            <p>The top section is the interactive product moment: connect wallet, see your gravity, and eventually spend that gravity through an on-chain spin flow.</p>
-          </div>
-          <div className="bridge-card">
-            <div className="market-card-label">What Geeksy actually is</div>
-            <h3>AI operating layer</h3>
-            <p>Geeksy is a local-first assistant that writes code, runs scripts, schedules tasks, and connects together the rest of the stack.</p>
-          </div>
-          <div className="bridge-card">
-            <div className="market-card-label">Underlying libraries</div>
-            <h3>jsx-ai + smart-agent</h3>
-            <p>The stack is powered by reusable infrastructure: composable prompt components, autonomous execution loops, and observable tool pipelines.</p>
-          </div>
-        </div>
-        <div id="market-root" />
+        <div className="section-label">GKSY Token</div>
+        <h2>The token that powers the gravity game</h2>
+        <p className="section-desc">GKSY is the Solana token behind the gravity mechanic. Hold it to earn gravity, spin for SOL, and climb the stardust leaderboard.</p>
+        <div id="market-root"><MarketFallback data={marketSnapshot} /></div>
+        <script id="ssr-market-data" type="application/json">{JSON.stringify(marketSnapshot)}</script>
+        <script id="ssr-gravity-data" type="application/json">{JSON.stringify(gravitySnapshot)}</script>
       </section>
 
-      <section className="section" id="problem">
-        <div className="section-label">The Problem</div>
-        <h2>You Don&apos;t Own Your AI</h2>
-        <p className="section-desc">ChatGPT, Claude, Cursor, Copilot — they all share the same architecture: your prompts go to their servers, their models process them, they charge you monthly. Your code, your conversations, your business logic — stored on infrastructure you don&apos;t control.</p>
-        <div className="problem-grid">
-          <div className="problem-card"><div className="problem-icon">💸</div><h3>$20-400/month</h3><p>Every AI tool charges a subscription. Use three tools? That&apos;s $60-1200/year just for API access to models you could run locally.</p></div>
-          <div className="problem-card"><div className="problem-icon">🔓</div><h3>Your Data, Their Servers</h3><p>Every prompt, every file you share with AI, every conversation — processed and stored on infrastructure you don&apos;t control.</p></div>
-          <div className="problem-card"><div className="problem-icon">🔒</div><h3>Vendor Lock-in</h3><p>Build workflows inside their products and your investment stays trapped in their ecosystem.</p></div>
-          <div className="problem-card"><div className="problem-icon">⚡</div><h3>Rate Limits & Downtime</h3><p>Hit your cap during a critical task? Too bad. The AI you pay for decides when you&apos;ve had enough.</p></div>
-        </div>
-        <div className="solution-banner"><h3>Our answer: build every layer yourself.</h3><p>Five open-source layers. From the JSX prompt interface down to custom PCB hardware. Each layer works standalone. Together, they&apos;re a complete AI stack that runs on your terms.</p></div>
-      </section>
-
-      <section className="section section-stack-intro" id="stack-intro">
-        <div className="section-label">The Stack</div>
-        <h2>A cosmic stack built in layers</h2>
-        <p className="section-desc">If gravity is the game surface, the stack below is the engine room. Each layer can stand on its own, but together they form the larger Geeksy universe: prompts, agents, personal AI, hardware, and decentralized inference.</p>
+      <section className="section" id="stack">
+        <div className="section-label">The Stack Behind Geeksy</div>
+        <h2>More than a token game</h2>
+        <p className="section-desc">Geeksy is a complete AI ecosystem: local-first assistant, autonomous agent framework, composable LLM toolkit, and custom hardware. The gravity game is the front door.</p>
         <div className="stack-pillars">
-          <div className="stack-pillar"><span>01</span><div><h3>Interface</h3><p>jsx-ai turns prompts into reusable components.</p></div></div>
-          <div className="stack-pillar"><span>02</span><div><h3>Execution</h3><p>smart-agent runs goals until they are actually done.</p></div></div>
-          <div className="stack-pillar"><span>03</span><div><h3>Ownership</h3><p>geeksy keeps your workflows, data, and automation on your side.</p></div></div>
-          <div className="stack-pillar"><span>04</span><div><h3>Embodiment</h3><p>Custom hardware and inference networks extend the system into the physical world.</p></div></div>
+          <div className="stack-pillar"><span>01</span><div><h3>jsx-ai</h3><p>Composable JSX prompts for any LLM provider. 5 providers, zero config.</p></div></div>
+          <div className="stack-pillar"><span>02</span><div><h3>smart-agent</h3><p>Autonomous agent framework with objectives, validation, and parallel tools.</p></div></div>
+          <div className="stack-pillar"><span>03</span><div><h3>geeksy</h3><p>Local-first AI assistant. One command: <code>npx geeksy</code>. SQLite, scheduling, Telegram.</p></div></div>
+          <div className="stack-pillar"><span>04</span><div><h3>Hardware</h3><p>Custom smart speaker with T527 SoC + FPGA. Open-source PCB. Local inference.</p></div></div>
         </div>
-      </section>
-
-      <section className="section" id="jsx-ai">
-        <div className="section-label">Layer 1 · LLM Interface</div>
-        <h2>jsx-ai — Prompts Are Components</h2>
-        <p className="section-desc">The Vercel AI SDK gives you <code>generateText()</code> with JSON tool schemas. LangChain gives you 47 abstractions for a simple prompt. We give you JSX. Your prompts become composable, testable, reusable components — exactly like React components, but for LLMs.</p>
-        <div className="compare-grid">
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ Vercel AI SDK / LangChain</div><h3>JSON schemas, 20+ lines per tool</h3><p>Tools defined as deeply nested JSON objects with provider-specific configs and lots of boilerplate.</p></div>
-          <div className="compare-card ours"><div className="compare-label ours-label">✓ jsx-ai — 3 lines per tool</div><h3>JSX components, works everywhere</h3><p>Tools are components. Import them, compose them, share them across projects. Auto-detect provider from model name.</p></div>
+        <div className="start-grid">
+          <div className="start-card"><h3>jsx-ai</h3><p>Composable prompts for any LLM</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install jsx-ai</pre></div><a href="https://www.npmjs.com/package/jsx-ai" className="start-link">npm →</a></div>
+          <div className="start-card"><h3>smart-agent</h3><p>Autonomous agent with objectives</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install smart-agent-ai</pre></div><a href="https://www.npmjs.com/package/smart-agent-ai" className="start-link">npm →</a></div>
+          <div className="start-card"><h3>geeksy</h3><p>Local-first AI assistant</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npx geeksy</pre></div><a href="https://www.npmjs.com/package/geeksy" className="start-link">npm →</a></div>
         </div>
-        <div className="features">
-          <div className="feature"><div className="feature-icon">🔌</div><h3>5 Providers, Zero Config</h3><p>Gemini, OpenAI, Anthropic, DeepSeek, Qwen. Just change the model string.</p></div>
-          <div className="feature"><div className="feature-icon">🧩</div><h3>Composable Like React</h3><p>Build prompt components and reuse them anywhere.</p></div>
-          <div className="feature"><div className="feature-icon">📐</div><h3>5 Encoding Strategies</h3><p>Native function calling, XML, NLT, natural language, hybrid.</p></div>
-        </div>
-      </section>
-
-      <section className="section" id="agent">
-        <div className="section-label">Layer 2 · Agent Framework</div>
-        <h2>smart-agent — Autonomous, Not Assistive</h2>
-        <p className="section-desc">Pi agent, Claude Code, and Cursor are assistants — you type, they respond, you approve. smart-agent is an autonomous agent — you define what &quot;done&quot; means, and it works until it gets there.</p>
-        <div className="compare-grid three-col">
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ Pi Agent / Claude Code</div><h3>Human-in-the-loop, one-shot</h3><ul className="compare-list"><li>You approve each tool call</li><li>No concept of objectives</li><li>Can&apos;t run overnight</li></ul></div>
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ OpenClaw / AutoGPT</div><h3>Loops but no validation</h3><ul className="compare-list"><li>Runs autonomously but can&apos;t verify results</li><li>No skill files</li><li>Spins in circles when stuck</li></ul></div>
-          <div className="compare-card ours"><div className="compare-label ours-label">✓ smart-agent</div><h3>Autonomous + Validated</h3><ul className="compare-list"><li><strong>Objectives</strong> with validate()</li><li><strong>Skills</strong> via markdown files</li><li><strong>Parallel tools</strong> and streaming events</li></ul></div>
-        </div>
-      </section>
-
-      <section className="section" id="geeksy">
-        <div className="section-label">Layer 3 · Personal AI OS</div>
-        <h2>geeksy — Your AI, On Your Machine</h2>
-        <p className="section-desc">ChatGPT is a web app. Claude is a web app. They store your history on their servers. Geeksy is a local-first AI assistant that runs on your machine, stores everything in SQLite on your disk, and works with any model provider.</p>
-        <div className="compare-grid three-col">
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ ChatGPT / Claude.ai</div><h3>Cloud-hosted chat interface</h3><ul className="compare-list"><li>Your conversations stored on their servers</li><li>Subscriptions and rate limits</li><li>No scheduling or autonomy</li></ul></div>
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ OpenClaw / Open WebUI</div><h3>Self-hosted but limited</h3><ul className="compare-list"><li>Docker-heavy</li><li>Still mostly chat UI</li><li>No heartbeat or background work</li></ul></div>
-          <div className="compare-card ours"><div className="compare-label ours-label">✓ geeksy</div><h3>Local AI OS with autonomy</h3><ul className="compare-list"><li><strong>One command</strong>: <code>npx geeksy</code></li><li><strong>Local SQLite</strong></li><li><strong>Heartbeat + scheduling</strong></li><li><strong>Secrets vault</strong></li><li><strong>Telegram bridge</strong></li></ul></div>
-        </div>
-      </section>
-
-      <section className="section" id="hardware">
-        <div className="section-label">Layer 4 · Smart Hardware</div>
-        <h2>The Speaker That Runs Your AI</h2>
-        <p className="section-desc">Alexa sends every word to Amazon. Google Home sends every word to Google. Our smart speaker runs an AllWinner T527 SoC with a Gowin FPGA and 4-mic array on an open-source PCB. The AI runs on the device.</p>
-        <div className="compare-grid">
-          <div className="compare-card theirs"><div className="compare-label theirs-label">❌ Alexa / Google Home / Siri</div><h3>Always listening, always uploading</h3><ul className="compare-list"><li>Every wake word goes to their cloud</li><li>Proprietary hardware</li><li>Locked ecosystem</li></ul></div>
-          <div className="compare-card ours"><div className="compare-label ours-label">✓ MY-SPACE Smart Speaker</div><h3>Open hardware, private inference</h3><ul className="compare-list"><li>T527 SoC + GW2A-18 FPGA</li><li>4× MEMS microphones + ES8388 codec</li><li>Open-source PCB and BOM</li></ul></div>
-        </div>
-      </section>
-
-      <section className="section" id="network">
-        <div className="section-label">Layer 5 · The Endgame</div>
-        <h2>Decentralized Inference Network</h2>
-        <p className="section-desc">A mesh network of speakers where inference is free because you own the hardware. No API fees. No subscriptions. No one sees your data.</p>
-        <div className="vision-grid">
-          <div><h3 style={{ fontSize: '22px', fontWeight: 700, marginBottom: '16px' }}>How Weight Sharding Works</h3><p style={{ color: 'var(--text2)', lineHeight: '1.8', marginBottom: '24px' }}>A 7B parameter model can be split across multiple speakers. Each device loads specific transformer layers and only sees tensor activations — not your words.</p><div className="math-box"><div className="math-row"><span>1 speaker</span><span>→ 1-3B model</span></div><div className="math-row"><span>4 speakers</span><span>→ 7B model</span></div><div className="math-row"><span>10 speakers</span><span>→ 30B model</span></div><div className="math-row"><span>20 speakers</span><span>→ 70B model</span></div></div></div>
-          <div className="vision-diagram"><h3>🌐 Inference Mesh</h3><div className="vision-nodes"><div className="vision-node active">Speaker A<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 0-7</span></div><div className="vision-node active">Speaker B<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 8-15</span></div><div className="vision-node active">Speaker C<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 16-23</span></div><div className="vision-node active">Speaker D<br/><span style={{ fontSize: '10px', color: 'var(--green)' }}>layers 24-31</span></div><div className="vision-node">Speaker E<br/><span style={{ fontSize: '10px' }}>redundancy</span></div><div className="vision-node">Speaker F<br/><span style={{ fontSize: '10px' }}>redundancy</span></div></div><p style={{ marginTop: '20px', fontSize: '13px', color: 'var(--text2)' }}>7B model · 4 speakers · 0 cloud · ∞ privacy</p></div>
-        </div>
-      </section>
-
-      <section className="section" id="compare">
-        <div className="section-label">Full Comparison</div>
-        <h2>How We Compare</h2>
-        <div className="comparison-table-wrap"><table className="comparison-table"><thead><tr><th>Feature</th><th>ChatGPT / Claude.ai</th><th>Pi Agent / Claude Code</th><th>OpenClaw / Open WebUI</th><th className="highlight-col">Geeksy Stack</th></tr></thead><tbody><tr><td>Data Privacy</td><td className="bad">❌ Cloud-stored</td><td className="bad">❌ Cloud API calls</td><td className="ok">⚠️ Self-hosted option</td><td className="good">✅ Local-only SQLite</td></tr><tr><td>Cost</td><td className="bad">$20-200/mo</td><td className="bad">$20-100/mo API</td><td className="ok">Free + API costs</td><td className="good">✅ Free (BYO API key or local LLM)</td></tr><tr><td>Autonomous Execution</td><td className="bad">❌ Chat only</td><td className="bad">❌ Approval per step</td><td className="bad">❌ Chat only</td><td className="good">✅ Objective-driven loop</td></tr><tr><td>Background Tasks</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="bad">❌ None</td><td className="good">✅ Heartbeat + cron</td></tr><tr><td>Mobile Access</td><td className="ok">App (cloud)</td><td className="bad">❌ Terminal only</td><td className="bad">❌ Desktop browser</td><td className="good">✅ Telegram bot + Web</td></tr></tbody></table></div>
-      </section>
-
-      <section className="section" id="waterfall">
-        <div className="section-label">Architecture</div>
-        <h2>Async Agents Waterfall Model</h2>
-        <p className="section-desc">Our smart-agent framework uses an asynchronous waterfall model that allows multiple agents to work on different aspects of a problem simultaneously, then converge their results for optimal outcomes.</p>
-        <div className="waterfall-diagram"><div className="waterfall-stage"><div className="stage-header"><span className="stage-number">1</span><h3>Problem Analysis</h3></div><p>Analyzes requirements, constraints, and success criteria</p><div className="agent-tag">Analyzer Agent</div></div><div className="waterfall-arrow">↓</div><div className="waterfall-stage"><div className="stage-header"><span className="stage-number">2</span><h3>Research & Planning</h3></div><p>Gathers information, explores solutions, creates execution plan</p><div className="agent-tags"><div className="agent-tag">Research Agent</div><div className="agent-tag">Planner Agent</div></div></div><div className="waterfall-arrow">↓</div><div className="parallel-stages"><div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Implementation</h3></div><p>Executes the planned solution with multiple specialized agents</p><div className="agent-tags"><div className="agent-tag">Coder Agent</div><div className="agent-tag">Tester Agent</div><div className="agent-tag">Reviewer Agent</div></div></div><div className="waterfall-stage parallel"><div className="stage-header"><span className="stage-number">3</span><h3>Validation</h3></div><p>Verifies correctness, performance, and compliance</p><div className="agent-tags"><div className="agent-tag">Validator Agent</div><div className="agent-tag">Security Agent</div></div></div></div><div className="waterfall-arrow">↓</div><div className="waterfall-stage final"><div className="stage-header"><span className="stage-number">5</span><h3>Verification</h3></div><p>Final validation against original objectives and requirements</p><div className="agent-tag">Quality Agent</div></div></div>
-      </section>
-
-      <section className="section" id="start">
-        <div className="section-label">Get Started</div>
-        <h2>Try It Right Now</h2>
-        <div className="start-grid"><div className="start-card"><h3>jsx-ai</h3><p>Composable prompts for any LLM</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install jsx-ai</pre></div><a href="https://www.npmjs.com/package/jsx-ai" className="start-link">npm →</a></div><div className="start-card"><h3>smart-agent</h3><p>Autonomous agent with objectives</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npm install smart-agent-ai</pre></div><a href="https://www.npmjs.com/package/smart-agent-ai" className="start-link">npm →</a></div><div className="start-card"><h3>geeksy</h3><p>Local-first AI assistant</p><div className="code-block" style={{ marginBottom: '12px' }}><pre>npx geeksy</pre></div><a href="https://www.npmjs.com/package/geeksy" className="start-link">npm →</a></div></div>
       </section>
 
       <footer className="footer"><div className="footer-links"><a href="https://github.com/7flash">GitHub</a><a href="https://www.npmjs.com/package/jsx-ai">jsx-ai</a><a href="https://www.npmjs.com/package/smart-agent-ai">smart-agent</a><a href="https://www.npmjs.com/package/geeksy">geeksy</a></div><p>Built with Melina.js · Every layer open source · © 2026 geeksy.xyz</p></footer>

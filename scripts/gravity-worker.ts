@@ -28,6 +28,14 @@ function ensureSchema() {
       value TEXT NOT NULL
     );
   `)
+
+  // Ensure stardust column exists
+  try {
+    const cols = db.query(`PRAGMA table_info(gravity_points)`).all() as Array<{ name: string }>
+    if (!cols.some((c) => c.name === 'stardust')) {
+      db.exec(`ALTER TABLE gravity_points ADD COLUMN stardust REAL NOT NULL DEFAULT 0`)
+    }
+  } catch {}
 }
 
 function getMeta(key: string) {
