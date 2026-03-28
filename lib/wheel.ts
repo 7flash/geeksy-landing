@@ -97,6 +97,8 @@ export function ensureWheelSchema() {
       signature TEXT,
       status TEXT NOT NULL,
       processed_at INTEGER,
+      tx_signature TEXT,
+      admin_reason TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -110,6 +112,8 @@ export function ensureWheelSchema() {
 
   ensureColumn('wheel_claims', 'request_id', `ALTER TABLE wheel_claims ADD COLUMN request_id TEXT`)
   ensureColumn('wheel_claims', 'requested_at', `ALTER TABLE wheel_claims ADD COLUMN requested_at INTEGER`)
+  ensureColumn('claim_requests', 'tx_signature', `ALTER TABLE claim_requests ADD COLUMN tx_signature TEXT`)
+  ensureColumn('claim_requests', 'admin_reason', `ALTER TABLE claim_requests ADD COLUMN admin_reason TEXT`)
 }
 
 export function getWalletGravity(wallet: string) {
@@ -469,9 +473,9 @@ export async function consumeClaimRequest(wallet: string, requestId: string, sig
   db.transaction(() => {
     db.query(`
       UPDATE claim_requests
-      SET signature = ?, status = 'requested', processed_at = ?, updated_at = ?
+      SET signature = ?, status = 'requested', updated_at = ?
       WHERE id = ?
-    `).run(signature, now, now, requestId)
+    `).run(signature, now, requestId)
 
     db.query(`
       UPDATE wheel_claims
@@ -522,6 +526,109 @@ export function getClaimHistory(wallet: string, limit = 20) {
   return rows
 }
 
+export function getAdminClaimRequests(status = 'requested', limit = 50) {
+  ensureWheelSchema()
+  const rows = db.query(`
+    SELECT r.id, r.wallet, r.amount, r.token, r.claim_count as claimCount, r.status, r.processed_at as processedAt,
+           r.tx_signature as txSignature, r.admin_reason as adminReason, r.created_at as createdAt, r.updated_at as updatedAt,
+           COALESCE(group_concat(c.id, ','), '') as claimIds
+    FROM claim_requests r
+    LEFT JOIN claim_request_items i ON i.request_id = r.id
+    LEFT JOIN wheel_claims c ON c.id = i.claim_id
+    WHERE r.status = ?
+    GROUP BY r.id
+    ORDER BY r.created_at ASC
+    LIMIT ?
+  `).all(status, limit) as Array<{
+    id: string
+    wallet: string
+    amount: number
+    token: string
+    claimCount: number
+    status: string
+    processedAt: number | null
+    txSignature: string | null
+    adminReason: string | null
+    createdAt: number
+    updatedAt: number
+    claimIds: string
+  }>
+
+  return rows.map((row) => ({
+    ...row,
+    claimIds: row.claimIds ? row.claimIds.split(',').filter(Boolean) : [],
+  }))
+}
+
+export function settleClaimRequest({ requestId, status, txSignature, reason }: { requestId: string; status: string; txSignature?: string; reason?: string }) {
+  ensureWheelSchema()
+  const nextStatus = status.trim().toLowerCase()
+  if (nextStatus !== 'claimed' && nextStatus !== 'failed') {
+    throw new Error('status must be claimed or failed')
+  }
+  if (nextStatus === 'claimed' && !txSignature?.trim()) {
+    throw new Error('txSignature is required when marking a claim as claimed')
+  }
+
+  const now = Date.now()
+  const request = db.query(`
+    SELECT id, wallet, amount, token, claim_count as claimCount, status, processed_at as processedAt
+    FROM claim_requests
+    WHERE id = ?
+  `).get(requestId) as {
+    id: string
+    wallet: string
+    amount: number
+    token: string
+    claimCount: number
+    status: string
+    processedAt: number | null
+  } | null
+
+  if (!request) throw new Error('Claim request not found')
+  if (request.status !== 'requested') throw new Error('Only requested claim flows can be settled')
+  if (request.processedAt) throw new Error('Claim request already settled')
+
+  const claimRows = db.query(`
+    SELECT c.id, c.status
+    FROM claim_request_items i
+    JOIN wheel_claims c ON c.id = i.claim_id
+    WHERE i.request_id = ?
+  `).all(requestId) as Array<{ id: string; status: string }>
+
+  if (!claimRows.length) throw new Error('Claim request has no linked claim rows')
+  if (claimRows.some((row) => row.status !== 'requested')) {
+    throw new Error('Claim rows are not all in requested state')
+  }
+
+  const normalizedTx = txSignature?.trim() || null
+  const normalizedReason = reason?.trim() || null
+
+  db.transaction(() => {
+    db.query(`
+      UPDATE claim_requests
+      SET status = ?, processed_at = ?, tx_signature = ?, admin_reason = ?, updated_at = ?
+      WHERE id = ?
+    `).run(nextStatus, now, normalizedTx, normalizedReason, now, requestId)
+
+    db.query(`
+      UPDATE wheel_claims
+      SET status = ?, tx_signature = ?, updated_at = ?
+      WHERE id IN (SELECT claim_id FROM claim_request_items WHERE request_id = ?)
+    `).run(nextStatus, normalizedTx, now, requestId)
+  })()
+
+  return {
+    requestId,
+    wallet: request.wallet,
+    status: nextStatus,
+    txSignature: normalizedTx,
+    reason: normalizedReason,
+    processedAt: now,
+    claimCount: claimRows.length,
+  }
+}
+
 export function getWheelWalletSummary(wallet: string) {
   ensureWheelSchema()
   const synced = syncWalletLedger(wallet)
@@ -549,7 +656,8 @@ export function getWheelWalletSummary(wallet: string) {
   `).get(wallet) as { id: string; tierId: string; rewardAmount: number; createdAt: number } | null
 
   const latestClaimRequest = db.query(`
-    SELECT id, amount, token, claim_count as claimCount, status, processed_at as processedAt, created_at as createdAt
+    SELECT id, amount, token, claim_count as claimCount, status, processed_at as processedAt,
+           tx_signature as txSignature, admin_reason as adminReason, created_at as createdAt
     FROM claim_requests
     WHERE wallet = ?
     ORDER BY created_at DESC
@@ -561,6 +669,8 @@ export function getWheelWalletSummary(wallet: string) {
     claimCount: number
     status: string
     processedAt: number | null
+    txSignature: string | null
+    adminReason: string | null
     createdAt: number
   } | null
 
