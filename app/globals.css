@@ -63,6 +63,10 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .featured-spin-metrics { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
 .featured-spin-metrics span { display:block; color:var(--text2); font-size:11px; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
 .featured-spin-metrics strong { font-size:16px; color:var(--text); }
+.featured-spin-share-box { margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,.08); }
+.featured-spin-share-box p { color:var(--text2); font-size:13px; line-height:1.7; white-space:pre-line; }
+.featured-spin-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+.featured-spin-x-link { padding:14px 22px; border-radius:10px; }
 .spins-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; position:relative; z-index:1; }
 .spins-card { background:rgba(17,17,40,.72); border:1px solid rgba(129,140,248,.16); border-radius:18px; padding:18px; }
 .spins-card-header h4 { font-size:18px; margin-top:2px; }
@@ -224,10 +228,10 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
   .gravity-hero-panel { min-height:auto; }
 }
 @media (max-width: 900px) {
-  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta,.wallet-summary-grid,.stack-pillars,.spins-grid { grid-template-columns:1fr; }
+  .compare-grid,.compare-grid.three-col,.vision-grid,.start-grid,.market-grid,.wheel-legend,.holders-meta,.wallet-summary-grid,.stack-pillars,.spins-grid,.featured-spin-metrics { grid-template-columns:1fr; }
   .nav-links { flex-wrap:wrap; gap:12px; justify-content:flex-end; }
   .market-card-primary { grid-column:auto; }
-  .market-token-row,.gravity-toolbar,.gravity-dashboard-subline { flex-direction:column; align-items:flex-start; }
+  .market-token-row,.gravity-toolbar,.gravity-dashboard-subline,.featured-spin-top { flex-direction:column; align-items:flex-start; }
 }
 @media (max-width: 640px) {
   .landing, .landing-wide { width:min(1320px, calc(100% - 32px)); }

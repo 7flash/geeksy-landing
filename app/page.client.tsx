@@ -142,7 +142,7 @@ function percentOfGravity(row: LeaderboardRow, rows: LeaderboardRow[]) {
   return total > 0 ? (row.points / total) * 100 : 0
 }
 function rewardPctLabel(rewardBps: number) { return `${(rewardBps / 100).toFixed(2)}%` }
-function bytesToBase64(bytes: Uint8Array) { let binary=''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary) }
+function bytesToBase64(bytes: Uint8Array) { let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary) }
 
 function buildRewardSegments(tiers: RewardTier[]) {
   let start = 0
@@ -173,6 +173,15 @@ function buildSpinPermalink(spinId: string) {
   url.searchParams.set('spin', spinId)
   return url.toString()
 }
+function buildSpinShareText(spin: SpinRow) {
+  const wallet = shortWallet(spin.wallet) || 'a GKSY holder'
+  return `I just hit the ${spin.tierId.toUpperCase()} reward tier on Geeksy's gravity wheel. ${wallet} unlocked ${rewardPctLabel(spin.rewardBps)} of treasury rewards (${fmtPoints(spin.rewardAmount)} recorded) by spending accumulated GKSY gravity.\n\nHold GKSY. Accumulate gravity minute by minute. Spin the wheel. #Geeksy #GKSY`
+}
+function buildSpinTweetUrl(spin: SpinRow) {
+  const permalink = buildSpinPermalink(spin.id)
+  const text = buildSpinShareText(spin)
+  return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(permalink)}`
+}
 
 function MarketPanel({ data, loading }: { data: MarketData | null; loading: boolean }) {
   if (loading) return <div className="market-loading">Loading live token data…</div>
@@ -190,7 +199,9 @@ function MarketPanel({ data, loading }: { data: MarketData | null; loading: bool
 
 function FeaturedSpinCard({ spin }: { spin: SpinRow | null }) {
   if (!spin) return null
-  return <div className="featured-spin-card"><div className="market-card-label">Featured Spin</div><div className="featured-spin-top"><div><h4>{spin.tierId.toUpperCase()}</h4><p>{new Date(spin.createdAt).toLocaleString()}</p></div><button className="wheel-secondary-btn" data-spin-link={spin.id}>Copy Permalink</button></div><div className="featured-spin-metrics"><div><span>Reward</span><strong>{rewardPctLabel(spin.rewardBps)} treasury</strong></div><div><span>Recorded</span><strong>{fmtPoints(spin.rewardAmount)}</strong></div><div><span>Status</span><strong>{spin.status}</strong></div></div></div>
+  const shareText = buildSpinShareText(spin)
+  const tweetUrl = buildSpinTweetUrl(spin)
+  return <div className="featured-spin-card"><div className="market-card-label">Featured Spin</div><div className="featured-spin-top"><div><h4>{spin.tierId.toUpperCase()}</h4><p>{new Date(spin.createdAt).toLocaleString()}</p></div><button className="wheel-secondary-btn" data-spin-link={spin.id}>Copy Permalink</button></div><div className="featured-spin-metrics"><div><span>Reward</span><strong>{rewardPctLabel(spin.rewardBps)} treasury</strong></div><div><span>Recorded</span><strong>{fmtPoints(spin.rewardAmount)}</strong></div><div><span>Status</span><strong>{spin.status}</strong></div></div><div className="featured-spin-share-box"><div className="market-card-label">Share this result</div><p>{shareText}</p><div className="featured-spin-actions"><button className="wheel-secondary-btn" data-spin-copy-text={spin.id}>Copy Share Text</button><button className="wheel-secondary-btn" data-spin-native-share={spin.id}>Share</button><a className="btn-primary featured-spin-x-link" href={tweetUrl} target="_blank" rel="noopener">Share on X</a></div></div></div>
 }
 
 function SpinsPanel({ title, spins, empty }: { title: string; spins: SpinRow[]; empty: string }) {
@@ -385,6 +396,7 @@ export default function mount() {
         render(<GravityHeroPanel rows={gravityData.leaderboard} wallet={connectedWallet} summary={walletSummary} featuredSpin={featuredSpin} recentSpins={recentSpins} mySpins={mySpins} expanded={heroExpanded} />, heroRoot)
         const toggle = document.getElementById('toggle-hero-holders-btn') as HTMLButtonElement | null
         if (toggle) toggle.onclick = () => { heroExpanded = !heroExpanded; renderAll() }
+
         document.querySelectorAll('[data-spin-link]').forEach((node) => {
           ;(node as HTMLButtonElement).onclick = async () => {
             const spinId = (node as HTMLButtonElement).dataset.spinLink
@@ -393,6 +405,43 @@ export default function mount() {
               await navigator.clipboard.writeText(buildSpinPermalink(spinId))
               ;(node as HTMLButtonElement).textContent = 'Copied Link'
               setTimeout(() => { ;(node as HTMLButtonElement).textContent = 'Copy Permalink' }, 1500)
+            } catch {}
+          }
+        })
+
+        document.querySelectorAll('[data-spin-copy-text]').forEach((node) => {
+          ;(node as HTMLButtonElement).onclick = async () => {
+            const spinId = (node as HTMLButtonElement).dataset.spinCopyText
+            const spin = spinId ? recentSpins.find((entry) => entry.id === spinId) || mySpins.find((entry) => entry.id === spinId) || (featuredSpin?.id === spinId ? featuredSpin : null) : null
+            if (!spin) return
+            try {
+              await navigator.clipboard.writeText(`${buildSpinShareText(spin)}\n\n${buildSpinPermalink(spin.id)}`)
+              ;(node as HTMLButtonElement).textContent = 'Copied Share Text'
+              setTimeout(() => { ;(node as HTMLButtonElement).textContent = 'Copy Share Text' }, 1500)
+            } catch {}
+          }
+        })
+
+        document.querySelectorAll('[data-spin-native-share]').forEach((node) => {
+          ;(node as HTMLButtonElement).onclick = async () => {
+            const spinId = (node as HTMLButtonElement).dataset.spinNativeShare
+            const spin = spinId ? recentSpins.find((entry) => entry.id === spinId) || mySpins.find((entry) => entry.id === spinId) || (featuredSpin?.id === spinId ? featuredSpin : null) : null
+            if (!spin) return
+            const shareData = {
+              title: `Geeksy ${spin.tierId.toUpperCase()} spin`,
+              text: buildSpinShareText(spin),
+              url: buildSpinPermalink(spin.id),
+            }
+            try {
+              if (navigator.share) {
+                await navigator.share(shareData)
+                ;(node as HTMLButtonElement).textContent = 'Shared'
+                setTimeout(() => { ;(node as HTMLButtonElement).textContent = 'Share' }, 1500)
+              } else {
+                await navigator.clipboard.writeText(`${shareData.text}\n\n${shareData.url}`)
+                ;(node as HTMLButtonElement).textContent = 'Copied Share Text'
+                setTimeout(() => { ;(node as HTMLButtonElement).textContent = 'Share' }, 1500)
+              }
             } catch {}
           }
         })
