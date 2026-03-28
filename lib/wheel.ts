@@ -9,6 +9,7 @@ export const CLAIM_CHALLENGE_TTL_MS = Number(process.env.CLAIM_CHALLENGE_TTL_MS 
 export const TREASURY_REWARD_TOKEN = process.env.TREASURY_REWARD_TOKEN || 'USDC'
 export const TREASURY_SOURCE = process.env.TREASURY_SOURCE || 'env'
 export const TREASURY_AMOUNT = Number(process.env.TREASURY_AMOUNT || 0)
+export const TREASURY_SNAPSHOT_COMMAND = (process.env.TREASURY_SNAPSHOT_COMMAND || '').trim()
 
 export const WHEEL_TIERS = [
   { id: 'dust', probability: 0.45, rewardBps: 5 },
@@ -23,6 +24,52 @@ function ensureColumn(table: string, column: string, sql: string) {
   const cols = db.query(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
   if (!cols.some((col) => col.name === column)) {
     db.exec(sql)
+  }
+}
+
+function shellCommand(command: string) {
+  return process.platform === 'win32' ? ['cmd', '/c', command] : ['sh', '-lc', command]
+}
+
+async function readTreasurySnapshotFromCommand() {
+  if (!TREASURY_SNAPSHOT_COMMAND) {
+    throw new Error('TREASURY_SNAPSHOT_COMMAND is required when TREASURY_SOURCE=command')
+  }
+
+  const proc = Bun.spawn(shellCommand(TREASURY_SNAPSHOT_COMMAND), {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: {
+      ...process.env,
+      TREASURY_SOURCE_MODE: TREASURY_SOURCE,
+      TREASURY_DEFAULT_TOKEN: TREASURY_REWARD_TOKEN,
+      TREASURY_DEFAULT_AMOUNT: String(TREASURY_AMOUNT),
+    },
+  })
+
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    throw new Error(stderr.trim() || stdout.trim() || `Treasury snapshot command exited with code ${exitCode}`)
+  }
+
+  let parsed: { amount?: number | string; token?: string; source?: string }
+  try {
+    parsed = JSON.parse(stdout || '{}')
+  } catch {
+    throw new Error(`Treasury snapshot command returned non-JSON output: ${stdout.trim().slice(0, 500)}`)
+  }
+
+  const amount = Number(parsed.amount)
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error('Treasury snapshot command must return a non-negative numeric amount')
+  }
+
+  return {
+    amount,
+    token: (parsed.token || TREASURY_REWARD_TOKEN).trim() || TREASURY_REWARD_TOKEN,
+    source: (parsed.source || 'command').trim() || 'command',
   }
 }
 
@@ -148,16 +195,20 @@ export function syncWalletLedger(wallet: string, now = Date.now()) {
   return getWalletGravity(wallet)
 }
 
-export function createTreasurySnapshot(now = Date.now()) {
+export async function createTreasurySnapshot(now = Date.now()) {
+  const snapshot = TREASURY_SOURCE === 'command'
+    ? await readTreasurySnapshotFromCommand()
+    : { token: TREASURY_REWARD_TOKEN, amount: TREASURY_AMOUNT, source: TREASURY_SOURCE }
+
   const id = randomUUID()
   db.query(`INSERT INTO treasury_snapshots (id, token, amount, source, created_at) VALUES (?, ?, ?, ?, ?)`).run(
     id,
-    TREASURY_REWARD_TOKEN,
-    TREASURY_AMOUNT,
-    TREASURY_SOURCE,
+    snapshot.token,
+    snapshot.amount,
+    snapshot.source,
     now,
   )
-  return { id, token: TREASURY_REWARD_TOKEN, amount: TREASURY_AMOUNT, source: TREASURY_SOURCE, createdAt: now }
+  return { id, token: snapshot.token, amount: snapshot.amount, source: snapshot.source, createdAt: now }
 }
 
 export function buildSpinMessage(wallet: string, challengeId: string, nonce: string, spendAmount: number, expiresAt: number) {
@@ -184,7 +235,7 @@ export function buildClaimMessage(wallet: string, requestId: string, nonce: stri
   ].join('\n')
 }
 
-export function createChallenge(wallet: string) {
+export async function createChallenge(wallet: string) {
   ensureWheelSchema()
   const now = Date.now()
   const synced = syncWalletLedger(wallet, now)
@@ -195,7 +246,7 @@ export function createChallenge(wallet: string) {
   const challengeId = randomUUID()
   const nonce = randomUUID()
   const expiresAt = now + WHEEL_CHALLENGE_TTL_MS
-  const treasurySnapshot = createTreasurySnapshot(now)
+  const treasurySnapshot = await createTreasurySnapshot(now)
   const message = buildSpinMessage(wallet, challengeId, nonce, WHEEL_SPEND_AMOUNT, expiresAt)
 
   db.query(`
@@ -632,6 +683,12 @@ export function settleClaimRequest({ requestId, status, txSignature, reason }: {
 export function getWheelWalletSummary(wallet: string) {
   ensureWheelSchema()
   const synced = syncWalletLedger(wallet)
+  const latestTreasury = db.query(`
+    SELECT token, amount, source, created_at as createdAt
+    FROM treasury_snapshots
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get() as { token: string; amount: number; source: string; createdAt: number } | null
   const claims = db.query(`
     SELECT
       COUNT(CASE WHEN status = 'pending' THEN 1 END) as pendingClaims,
@@ -684,9 +741,10 @@ export function getWheelWalletSummary(wallet: string) {
     requestedClaims: claims?.requestedClaims || 0,
     requestedAmount: claims?.requestedAmount || 0,
     wheelSpendAmount: WHEEL_SPEND_AMOUNT,
-    rewardToken: TREASURY_REWARD_TOKEN,
+    rewardToken: latestTreasury?.token || TREASURY_REWARD_TOKEN,
     rewardTiers: WHEEL_TIERS,
     latestSpin,
     latestClaimRequest,
+    latestTreasury,
   }
 }

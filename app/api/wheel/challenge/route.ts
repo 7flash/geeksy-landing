@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return Response.json({ ok: false, error: 'wallet is required' }, { status: 400 })
     }
 
-    const challenge = createChallenge(wallet)
+    const challenge = await createChallenge(wallet)
     return Response.json({ ok: true, ...challenge })
   } catch (error: any) {
     const message = error?.message || 'Failed to create challenge'
