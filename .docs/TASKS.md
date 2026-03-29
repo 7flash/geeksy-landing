@@ -70,7 +70,8 @@
 - [x] ~~**Add experiment date-group toggle**~~ - ✅ DONE. The experiment report API now supports `groupBy=day|week`, and `/admin/experiments` can switch between daily and weekly trend groupings for longer-running tests.
 - [x] ~~**Add experiment comparison summary for current grouping**~~ - ✅ DONE. `/admin/experiments` now shows grouping-aware current-vs-previous summary cards for the active period, current leader, leader momentum, and control movement.
 - [x] ~~**Add experiment sample-threshold controls**~~ - ✅ DONE. `/admin/experiments` now lets operators choose the exposure threshold used for leader highlighting and low-sample warnings, and persists that threshold locally.
-- [ ] **Add experiment control baseline toggle** - Let operators choose whether comparisons use `control`, best prior variant, or no baseline so non-control experiments remain easy to interpret.
+- [x] ~~**Add experiment control baseline toggle**~~ - ✅ DONE. `/admin/experiments` now lets operators choose `control`, `current leader`, or `none` as the comparison baseline for UI delta interpretation, with the choice persisted locally.
+- [ ] **Add experiment baseline messaging polish** - Clarify baseline-unavailable and no-baseline states in the grouped summary cards so exploratory experiments are even easier to scan.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 

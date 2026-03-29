@@ -49,14 +49,17 @@ type ReportResponse = {
 }
 
 type TrendMetric = 'ctr' | 'exposures' | 'clicks'
+type BaselineMode = 'control' | 'leader' | 'none'
 
 const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
 const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
 const TREND_GROUP_BY_KEY = 'geeksy-admin-experiments:trend-group-by'
 const TREND_METRIC_KEY = 'geeksy-admin-experiments:trend-metric'
 const SAMPLE_THRESHOLD_KEY = 'geeksy-admin-experiments:sample-threshold'
+const BASELINE_MODE_KEY = 'geeksy-admin-experiments:baseline-mode'
 const DEFAULT_SAMPLE_THRESHOLD = 25
 const SAMPLE_THRESHOLD_OPTIONS = [10, 25, 50, 100]
+const BASELINE_MODE_OPTIONS: BaselineMode[] = ['control', 'leader', 'none']
 const TREND_SERIES_COLORS = ['#818cf8', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4', '#a78bfa']
 
 function readInitialJson<T>(id: string): T | null {
@@ -88,16 +91,28 @@ function fmtDateRange(from: number, to: number) {
   return `${new Date(from).toLocaleString()} → ${new Date(to).toLocaleString()}`
 }
 
-function buildVariantComparison(report: ExperimentReport | null, sampleThreshold: number) {
-  if (!report) return { rows: [], controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
+function buildVariantComparison(report: ExperimentReport | null, sampleThreshold: number, baselineMode: BaselineMode) {
+  if (!report) return { rows: [], baselineVariantId: null as string | null, baselineLabel: 'No baseline', controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
 
-  const control = report.variants.find((variant) => variant.variantId === 'control') || report.variants[0] || null
+  const control = report.variants.find((variant) => variant.variantId === 'control') || null
   const controlVariantId = control?.variantId || null
   const sampled = report.variants.filter((variant) => variant.exposures >= sampleThreshold)
   const leader = sampled.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
   const lowSampleCount = report.variants.filter((variant) => variant.exposures < sampleThreshold).length
+  const baseline = baselineMode === 'control'
+    ? control
+    : baselineMode === 'leader'
+      ? leader
+      : null
+  const baselineLabel = baselineMode === 'control'
+    ? (baseline ? 'Δ vs Control' : 'Δ vs Control (unavailable)')
+    : baselineMode === 'leader'
+      ? (baseline ? 'Δ vs Leader' : 'Δ vs Leader (unavailable)')
+      : 'No baseline'
 
   return {
+    baselineVariantId: baseline?.variantId || null,
+    baselineLabel,
     controlVariantId,
     leaderVariantId: leader?.variantId || null,
     sampleHint: lowSampleCount > 0
@@ -105,10 +120,11 @@ function buildVariantComparison(report: ExperimentReport | null, sampleThreshold
       : `All visible variants have at least ${sampleThreshold} exposures.` ,
     rows: report.variants.map((variant) => ({
       ...variant,
-      deltaVsControl: control ? variant.ctr - control.ctr : null,
+      deltaVsBaseline: baseline ? variant.ctr - baseline.ctr : null,
       sampleStatus: variant.exposures >= sampleThreshold ? 'enough' : 'low',
       isLeader: !!leader && variant.variantId === leader.variantId,
       isControl: !!control && variant.variantId === control.variantId,
+      isBaseline: !!baseline && variant.variantId === baseline.variantId,
     })),
   }
 }
@@ -219,6 +235,8 @@ function AdminExperimentsApp({
   onTrendGroupByChange,
   sampleThreshold,
   onSampleThresholdChange,
+  baselineMode,
+  onBaselineModeChange,
 }: {
   options: ExperimentOption[]
   experimentId: string
@@ -232,8 +250,10 @@ function AdminExperimentsApp({
   onTrendGroupByChange: (groupBy: TrendGroupBy) => void
   sampleThreshold: number
   onSampleThresholdChange: (threshold: number) => void
+  baselineMode: BaselineMode
+  onBaselineModeChange: (mode: BaselineMode) => void
 }) {
-  const comparison = buildVariantComparison(report, sampleThreshold)
+  const comparison = buildVariantComparison(report, sampleThreshold, baselineMode)
   const periodSummary = buildPeriodSummary(report)
   return <div className="admin-claims-shell">
     <div className="admin-toolbar-card">
@@ -266,12 +286,20 @@ function AdminExperimentsApp({
             {SAMPLE_THRESHOLD_OPTIONS.map((value) => <option value={String(value)} key={value}>{value} exposures</option>)}
           </select>
         </div>
+        <div className="admin-field admin-field-status">
+          <label htmlFor="admin-experiment-baseline">Baseline</label>
+          <select id="admin-experiment-baseline" value={baselineMode}>
+            <option value="control">Control</option>
+            <option value="leader">Current Leader</option>
+            <option value="none">None</option>
+          </select>
+        </div>
         <div className="admin-toolbar-actions">
           <button className="btn-primary" id="admin-experiment-load-btn">{loading ? 'Loading…' : 'Load Report'}</button>
           <a className="wheel-secondary-btn admin-link-btn" id="admin-experiment-export-btn" href={`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}&groupBy=${encodeURIComponent(trendGroupBy)}&format=csv`}>Download CSV</a>
         </div>
       </div>
-      <p className="admin-toolbar-help">Uses the first-party experiment analytics API. CSV export is suitable for spreadsheet review and operator snapshots. The sample threshold only affects UI heuristics like leader highlighting and low-sample warnings.</p>
+      <p className="admin-toolbar-help">Uses the first-party experiment analytics API. CSV export is suitable for spreadsheet review and operator snapshots. The sample threshold and baseline mode only affect UI heuristics like leader highlighting, low-sample warnings, and delta comparisons.</p>
       {error ? <div className="admin-alert admin-alert-error">{error}</div> : null}
     </div>
 
@@ -300,11 +328,11 @@ function AdminExperimentsApp({
           <div className="gravity-wallet-state">{report.variants.length} variant{report.variants.length === 1 ? '' : 's'}</div>
         </div>
         {comparison.sampleHint ? <div className="admin-experiment-hint">{comparison.sampleHint}</div> : null}
-        {comparison.leaderVariantId ? <div className="admin-experiment-leader">Current leader: <code>{comparison.leaderVariantId}</code>{comparison.controlVariantId ? <> · vs control <code>{comparison.controlVariantId}</code></> : null}</div> : null}
+        {comparison.leaderVariantId ? <div className="admin-experiment-leader">Current leader: <code>{comparison.leaderVariantId}</code>{comparison.baselineVariantId ? <> · baseline <code>{comparison.baselineVariantId}</code></> : baselineMode === 'none' ? <> · baseline disabled</> : null}</div> : null}
         {!comparison.rows.length ? <div className="admin-empty-card">No experiment events recorded for this window yet.</div> : <div className="holders-table-wrap">
           <table className="holders-table">
             <thead>
-              <tr><th>Variant</th><th>Status</th><th>Exposures</th><th>Clicks</th><th>CTR</th><th>Δ vs Control</th><th>Unique Visitors</th></tr>
+              <tr><th>Variant</th><th>Status</th><th>Exposures</th><th>Clicks</th><th>CTR</th><th>{comparison.baselineLabel}</th><th>Unique Visitors</th></tr>
             </thead>
             <tbody>
               {comparison.rows.map((variant) => <tr key={variant.variantId} className={variant.isLeader ? 'admin-experiment-row-leader' : variant.isControl ? 'admin-experiment-row-control' : ''}>
@@ -313,13 +341,14 @@ function AdminExperimentsApp({
                     <code>{variant.variantId}</code>
                     {variant.isLeader ? <span className="admin-experiment-pill admin-experiment-pill-leader">Leader</span> : null}
                     {variant.isControl ? <span className="admin-experiment-pill admin-experiment-pill-control">Control</span> : null}
+                    {variant.isBaseline && baselineMode !== 'none' ? <span className="admin-experiment-pill admin-experiment-pill-control">Baseline</span> : null}
                   </div>
                 </td>
                 <td><span className={`admin-experiment-pill ${variant.sampleStatus === 'enough' ? 'admin-experiment-pill-sampled' : 'admin-experiment-pill-low-sample'}`}>{variant.sampleStatus === 'enough' ? 'Sample OK' : 'Low Sample'}</span></td>
                 <td>{variant.exposures}</td>
                 <td>{variant.clicks}</td>
                 <td>{fmtPct(variant.ctr)}</td>
-                <td className={variant.deltaVsControl != null ? (variant.deltaVsControl > 0 ? 'admin-delta-pos' : variant.deltaVsControl < 0 ? 'admin-delta-neg' : '') : ''}>{variant.isControl ? 'baseline' : fmtDeltaPct(variant.deltaVsControl)}</td>
+                <td className={variant.deltaVsBaseline != null ? (variant.deltaVsBaseline > 0 ? 'admin-delta-pos' : variant.deltaVsBaseline < 0 ? 'admin-delta-neg' : '') : ''}>{variant.isBaseline ? 'baseline' : fmtDeltaPct(variant.deltaVsBaseline)}</td>
                 <td>{variant.uniqueVisitors}</td>
               </tr>)}
             </tbody>
@@ -421,7 +450,11 @@ export default function mount() {
     ? readStorage(TREND_METRIC_KEY)! as TrendMetric
     : 'ctr'
   const storedThreshold = parseInt(readStorage(SAMPLE_THRESHOLD_KEY) || '', 10)
+  const storedBaselineMode = readStorage(BASELINE_MODE_KEY)
   let sampleThreshold = SAMPLE_THRESHOLD_OPTIONS.includes(storedThreshold) ? storedThreshold : DEFAULT_SAMPLE_THRESHOLD
+  let baselineMode: BaselineMode = BASELINE_MODE_OPTIONS.includes((storedBaselineMode || '') as BaselineMode)
+    ? storedBaselineMode as BaselineMode
+    : 'control'
   let loading = false
   let error: string | null = null
   let report: ExperimentReport | null = null
@@ -438,6 +471,10 @@ export default function mount() {
     }} sampleThreshold={sampleThreshold} onSampleThresholdChange={(threshold) => {
       sampleThreshold = threshold
       writeStorage(SAMPLE_THRESHOLD_KEY, String(sampleThreshold))
+      renderAll()
+    }} baselineMode={baselineMode} onBaselineModeChange={(mode) => {
+      baselineMode = mode
+      writeStorage(BASELINE_MODE_KEY, baselineMode)
       renderAll()
     }} />, root)
 
@@ -467,6 +504,15 @@ export default function mount() {
       const next = parseInt(thresholdSelect.value, 10)
       sampleThreshold = SAMPLE_THRESHOLD_OPTIONS.includes(next) ? next : DEFAULT_SAMPLE_THRESHOLD
       writeStorage(SAMPLE_THRESHOLD_KEY, String(sampleThreshold))
+      renderAll()
+    }
+
+    const baselineSelect = document.getElementById('admin-experiment-baseline') as HTMLSelectElement | null
+    if (baselineSelect) baselineSelect.onchange = () => {
+      baselineMode = BASELINE_MODE_OPTIONS.includes((baselineSelect.value || '') as BaselineMode)
+        ? baselineSelect.value as BaselineMode
+        : 'control'
+      writeStorage(BASELINE_MODE_KEY, baselineMode)
       renderAll()
     }
 
