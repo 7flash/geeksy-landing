@@ -9,7 +9,7 @@
 - [ ] **Optimize landing page performance** - Implement asset optimization, lazy loading, and caching strategies to improve load times.
 - [ ] **Add analytics tracking** - Integrate analytics to track visitor engagement, conversion rates, and user journey metrics.
 - [x] ~~**Add og:image and social preview assets**~~ - ✅ DONE. Added a dynamic `/spin/:id` share route with per-spin Open Graph/Twitter metadata and a generated `/api/og/spin/:id` preview image, plus a default share image for the home page.
-- [ ] **Polish branded social art direction** - Current social previews are dynamic and functional, but they still need more refined visual branding, typography, and richer token/wheel graphics.
+- [x] ~~**Polish branded social art direction**~~ - ✅ DONE. Upgraded `app/api/og/spin/[id]/route.ts` from a plain stats card to a more branded collectible-style preview with stronger layered gradients, tier chip, wheel motif, cleaner wallet/status/date tiles, and more visual-first reward emphasis.
 
 ## 🟢 Priority: Features
 - [x] ~~**Migrate standalone landing repo to Melina chat-demo site**~~ - ✅ DONE. Replaced the old anti-cloud/gravity landing with the dedicated Geeksy marketing landing, added client-side copy CTA behavior, and updated CTAs to point at the app domain.
