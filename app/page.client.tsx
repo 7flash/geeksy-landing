@@ -1,13 +1,17 @@
 import { render } from 'melina/client'
 
+type PhantomProvider = {
+  isPhantom?: boolean
+  publicKey?: { toString(): string }
+  connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>
+  disconnect: () => Promise<void>
+  signMessage?: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<{ signature?: Uint8Array } | Uint8Array>
+}
+
 declare global {
   interface Window {
-    solana?: {
-      isPhantom?: boolean
-      connect: (options?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString(): string } }>
-      disconnect: () => Promise<void>
-      signMessage?: (message: Uint8Array, display?: 'utf8' | 'hex') => Promise<{ signature: Uint8Array }>
-    }
+    solana?: PhantomProvider
+    phantom?: { solana?: PhantomProvider }
   }
 }
 
@@ -75,6 +79,21 @@ type WheelState = {
 const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6']
 const DEFAULT_VISIBLE_HOLDERS = 20
 const encoder = new TextEncoder()
+
+function getPhantomProvider(): PhantomProvider | null {
+  const direct = window.solana
+  if (direct?.isPhantom) return direct
+  const nested = window.phantom?.solana
+  if (nested?.isPhantom) return nested
+  return null
+}
+
+function getSignedBytesSignature(signed: { signature?: Uint8Array } | Uint8Array | null | undefined) {
+  if (!signed) throw new Error('Phantom returned an empty signature response.')
+  if (signed instanceof Uint8Array) return signed
+  if (signed.signature instanceof Uint8Array) return signed.signature
+  throw new Error('Phantom returned a signature in an unexpected format.')
+}
 
 function readInitialJson<T>(id: string): T | null {
   const node = document.getElementById(id)
@@ -319,18 +338,32 @@ export default function mount() {
     }
   }
 
-  const connectWallet = async () => {
-    const provider = window.solana
-    if (!provider?.isPhantom) { window.open('https://phantom.app/', '_blank', 'noopener'); return }
+  const connectWallet = async (onlyIfTrusted = false) => {
+    const provider = getPhantomProvider()
+    if (!provider?.isPhantom) {
+      if (!onlyIfTrusted) {
+        wheelState = { ...wheelState, error: 'Phantom wallet was not detected in this browser.' }
+        renderAll()
+        window.open('https://phantom.app/', '_blank', 'noopener')
+      }
+      return
+    }
     try {
-      const result = await provider.connect()
+      const result = await provider.connect(onlyIfTrusted ? { onlyIfTrusted: true } : undefined)
       connectedWallet = result.publicKey.toString()
+      wheelState = { ...wheelState, error: null }
+      renderAll()
       await fetchWalletSummary(connectedWallet)
-    } catch {}
+    } catch (error: any) {
+      if (!onlyIfTrusted) {
+        wheelState = { ...wheelState, error: error?.message || 'Phantom connection failed.' }
+        renderAll()
+      }
+    }
   }
 
   const requestClaim = async () => {
-    const provider = window.solana
+    const provider = getPhantomProvider()
     if (!provider?.isPhantom || !provider.signMessage || !connectedWallet) {
       wheelState = { ...wheelState, error: 'Connect Phantom first.' }; renderAll(); return
     }
@@ -343,7 +376,7 @@ export default function mount() {
       const challenge = await challengeRes.json()
       if (!challengeRes.ok || !challenge.ok) throw new Error(challenge.error || 'Failed to create claim challenge')
       const signed = await provider.signMessage(encoder.encode(challenge.message), 'utf8')
-      const signature = bytesToBase64(signed.signature)
+      const signature = bytesToBase64(getSignedBytesSignature(signed))
       const claimRes = await fetch('/api/wheel/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wallet: connectedWallet, requestId: challenge.requestId, signature }) })
       const claim = await claimRes.json()
       if (!claimRes.ok || !claim.ok) throw new Error(claim.error || 'Failed to submit claim request')
@@ -354,7 +387,7 @@ export default function mount() {
   }
 
   const spinRealWheel = async () => {
-    const provider = window.solana
+    const provider = getPhantomProvider()
     if (!provider?.isPhantom || !provider.signMessage || !connectedWallet) {
       wheelState = { ...wheelState, error: 'Connect Phantom first.' }; renderAll(); return
     }
@@ -371,7 +404,7 @@ export default function mount() {
       const challenge = await challengeRes.json()
       if (!challengeRes.ok || !challenge.ok) throw new Error(challenge.error || 'Failed to create wheel challenge')
       const signed = await provider.signMessage(encoder.encode(challenge.message), 'utf8')
-      const signature = bytesToBase64(signed.signature)
+      const signature = bytesToBase64(getSignedBytesSignature(signed))
       const spinRes = await fetch('/api/wheel/spin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wallet: connectedWallet, challengeId: challenge.challengeId, signature }) })
       const spin = await spinRes.json()
       if (!spinRes.ok || !spin.ok) throw new Error(spin.error || 'Failed to spin wheel')
@@ -424,7 +457,7 @@ export default function mount() {
     // Wire hero buttons
     const heroConnect = document.getElementById('hero-connect-wallet-btn') as HTMLButtonElement | null
     if (heroConnect) {
-      heroConnect.onclick = connectWallet
+      heroConnect.onclick = () => { void connectWallet() }
       heroConnect.textContent = connectedWallet ? (walletLoading ? 'Refreshing…' : '✓ Connected') : 'Connect Phantom'
     }
     const heroSpin = document.getElementById('hero-spin-wheel-btn') as HTMLButtonElement | null
@@ -471,6 +504,7 @@ export default function mount() {
   fetchGravity()
   fetchSpins()
   fetchClaims()
+  connectWallet(true)
 
   const marketInterval = setInterval(fetchMarket, 30_000)
   const gravityInterval = setInterval(fetchGravity, 60_000)
