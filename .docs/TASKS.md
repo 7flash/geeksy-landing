@@ -50,6 +50,7 @@
 - [ ] **Populate production wallet labels** - The registry system exists now, but production still needs real wallet addresses filled in for treasury, team, exchange, bonding-curve, and other notable entities.
 - [x] ~~**Add SSR fallback for market + gravity sections**~~ - ✅ DONE. Added shared `lib/market-cache.ts` live-or-cached snapshot helpers, switched the page SSR path to fetch market data server-side with stale-cache fallback, and updated `/api/market` + `/api/leaderboard` to reuse the same cache-aware strategy instead of depending on a first client refresh.
 - [x] ~~**Add stale-market UI hint**~~ - ✅ DONE. Both SSR and client-rendered market panels now show a clear cached-data notice when the landing is serving warm cache or stale Dexscreener fallback snapshots.
+- [x] ~~**Harden production wheel rollout runbook**~~ - ✅ DONE. Updated `docs/DEPLOY.md` with the exact `bgrun@3.12.13` upgrade path, landing/gravity restart sequence, expected commit set, and API/log spot checks to use before the manual Phantom test.
 - [ ] **Fix Windows bgrun local run quirk** - Direct local `bgrun --command "bun run server.ts"` on port `3400` is colliding with a stale Bun listener on this machine; `bgrun` validation works reliably via `bash -lc 'BUN_PORT=3412 bun run server.ts'` for now.
 - [ ] **Implement A/B testing framework** - Add capability to test different versions of the landing page to optimize conversion rates.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
