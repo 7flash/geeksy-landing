@@ -152,6 +152,12 @@ export TREASURY_PAYOUT_COMMAND="PAYOUT_MOCK_MODE=claimed bun run scripts/payout-
 npm run wheel:preflight
 ```
 
+Or use the built-in helper (it picks a Windows-safe vs Unix-safe mock command automatically):
+
+```bash
+npm run wheel:preflight:mock-payout
+```
+
 The worker/preflight command contract is:
 - JSON request via `stdin`
 - JSON response via `stdout`
