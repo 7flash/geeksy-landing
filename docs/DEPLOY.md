@@ -111,10 +111,21 @@ npm run wheel:preflight
 This checks:
 - effective treasury mode
 - RPC host / treasury wallet presence
+- `TREASURY_WALLET` plus `TREASURY_ASSET=SOL` or `TREASURY_TOKEN_MINT` requirements when `TREASURY_SOURCE=command`
 - `TREASURY_SNAPSHOT_COMMAND` output contract when `TREASURY_SOURCE=command`
 - `TREASURY_PAYOUT_COMMAND` JSON contract when configured
 
 Fix any reported preflight errors before continuing.
+
+### Env template
+
+A full wheel/treasury env template now exists at:
+
+```bash
+/opt/geeksy-landing/.env.example
+```
+
+Use it as the source of truth when switching production from fixed env treasury mode to live command mode.
 
 ### Payout command template
 

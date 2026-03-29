@@ -43,6 +43,10 @@ async function validateSnapshotCommand() {
     return
   }
 
+  assert((process.env.TREASURY_WALLET || '').trim(), 'TREASURY_WALLET is required when TREASURY_SOURCE=command')
+  const asset = (process.env.TREASURY_ASSET || '').trim().toUpperCase()
+  const tokenMint = (process.env.TREASURY_TOKEN_MINT || '').trim()
+  assert(asset === 'SOL' || !!tokenMint, 'Set TREASURY_ASSET=SOL or provide TREASURY_TOKEN_MINT when TREASURY_SOURCE=command')
   assert(TREASURY_SNAPSHOT_COMMAND, 'TREASURY_SNAPSHOT_COMMAND is required when TREASURY_SOURCE=command')
   const result = await runCommand(TREASURY_SNAPSHOT_COMMAND, 'treasury snapshot command')
   assert(result.exitCode === 0, 'Treasury snapshot command exited non-zero')
