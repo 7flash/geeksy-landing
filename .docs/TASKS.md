@@ -69,7 +69,8 @@
 - [x] ~~**Add experiment metric toggle**~~ - ✅ DONE. The experiment trend chart now switches between CTR, exposures, and clicks, persists the chosen metric locally, and lets operators compare both conversion quality and traffic volume over time.
 - [x] ~~**Add experiment date-group toggle**~~ - ✅ DONE. The experiment report API now supports `groupBy=day|week`, and `/admin/experiments` can switch between daily and weekly trend groupings for longer-running tests.
 - [x] ~~**Add experiment comparison summary for current grouping**~~ - ✅ DONE. `/admin/experiments` now shows grouping-aware current-vs-previous summary cards for the active period, current leader, leader momentum, and control movement.
-- [ ] **Add experiment sample-threshold controls** - Let operators change the minimum exposure threshold used for leader/warning heuristics so tiny internal tests and larger production tests can be interpreted with different strictness.
+- [x] ~~**Add experiment sample-threshold controls**~~ - ✅ DONE. `/admin/experiments` now lets operators choose the exposure threshold used for leader highlighting and low-sample warnings, and persists that threshold locally.
+- [ ] **Add experiment control baseline toggle** - Let operators choose whether comparisons use `control`, best prior variant, or no baseline so non-control experiments remain easy to interpret.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 

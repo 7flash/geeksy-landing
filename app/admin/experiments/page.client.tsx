@@ -54,7 +54,9 @@ const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
 const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
 const TREND_GROUP_BY_KEY = 'geeksy-admin-experiments:trend-group-by'
 const TREND_METRIC_KEY = 'geeksy-admin-experiments:trend-metric'
-const MIN_COMPARISON_EXPOSURES = 25
+const SAMPLE_THRESHOLD_KEY = 'geeksy-admin-experiments:sample-threshold'
+const DEFAULT_SAMPLE_THRESHOLD = 25
+const SAMPLE_THRESHOLD_OPTIONS = [10, 25, 50, 100]
 const TREND_SERIES_COLORS = ['#818cf8', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4', '#a78bfa']
 
 function readInitialJson<T>(id: string): T | null {
@@ -86,25 +88,25 @@ function fmtDateRange(from: number, to: number) {
   return `${new Date(from).toLocaleString()} → ${new Date(to).toLocaleString()}`
 }
 
-function buildVariantComparison(report: ExperimentReport | null) {
+function buildVariantComparison(report: ExperimentReport | null, sampleThreshold: number) {
   if (!report) return { rows: [], controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
 
   const control = report.variants.find((variant) => variant.variantId === 'control') || report.variants[0] || null
   const controlVariantId = control?.variantId || null
-  const sampled = report.variants.filter((variant) => variant.exposures >= MIN_COMPARISON_EXPOSURES)
+  const sampled = report.variants.filter((variant) => variant.exposures >= sampleThreshold)
   const leader = sampled.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
-  const lowSampleCount = report.variants.filter((variant) => variant.exposures < MIN_COMPARISON_EXPOSURES).length
+  const lowSampleCount = report.variants.filter((variant) => variant.exposures < sampleThreshold).length
 
   return {
     controlVariantId,
     leaderVariantId: leader?.variantId || null,
     sampleHint: lowSampleCount > 0
-      ? `${lowSampleCount} variant${lowSampleCount === 1 ? '' : 's'} below ${MIN_COMPARISON_EXPOSURES} exposures — treat results as directional, not decisive.`
-      : `All visible variants have at least ${MIN_COMPARISON_EXPOSURES} exposures.` ,
+      ? `${lowSampleCount} variant${lowSampleCount === 1 ? '' : 's'} below ${sampleThreshold} exposures — treat results as directional, not decisive.`
+      : `All visible variants have at least ${sampleThreshold} exposures.` ,
     rows: report.variants.map((variant) => ({
       ...variant,
       deltaVsControl: control ? variant.ctr - control.ctr : null,
-      sampleStatus: variant.exposures >= MIN_COMPARISON_EXPOSURES ? 'enough' : 'low',
+      sampleStatus: variant.exposures >= sampleThreshold ? 'enough' : 'low',
       isLeader: !!leader && variant.variantId === leader.variantId,
       isControl: !!control && variant.variantId === control.variantId,
     })),
@@ -215,6 +217,8 @@ function AdminExperimentsApp({
   onTrendMetricChange,
   trendGroupBy,
   onTrendGroupByChange,
+  sampleThreshold,
+  onSampleThresholdChange,
 }: {
   options: ExperimentOption[]
   experimentId: string
@@ -226,8 +230,10 @@ function AdminExperimentsApp({
   onTrendMetricChange: (metric: TrendMetric) => void
   trendGroupBy: TrendGroupBy
   onTrendGroupByChange: (groupBy: TrendGroupBy) => void
+  sampleThreshold: number
+  onSampleThresholdChange: (threshold: number) => void
 }) {
-  const comparison = buildVariantComparison(report)
+  const comparison = buildVariantComparison(report, sampleThreshold)
   const periodSummary = buildPeriodSummary(report)
   return <div className="admin-claims-shell">
     <div className="admin-toolbar-card">
@@ -254,12 +260,18 @@ function AdminExperimentsApp({
             <option value="week">Weekly</option>
           </select>
         </div>
+        <div className="admin-field admin-field-status">
+          <label htmlFor="admin-experiment-threshold">Sample Threshold</label>
+          <select id="admin-experiment-threshold" value={String(sampleThreshold)}>
+            {SAMPLE_THRESHOLD_OPTIONS.map((value) => <option value={String(value)} key={value}>{value} exposures</option>)}
+          </select>
+        </div>
         <div className="admin-toolbar-actions">
           <button className="btn-primary" id="admin-experiment-load-btn">{loading ? 'Loading…' : 'Load Report'}</button>
           <a className="wheel-secondary-btn admin-link-btn" id="admin-experiment-export-btn" href={`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}&groupBy=${encodeURIComponent(trendGroupBy)}&format=csv`}>Download CSV</a>
         </div>
       </div>
-      <p className="admin-toolbar-help">Uses the first-party experiment analytics API. CSV export is suitable for spreadsheet review and operator snapshots.</p>
+      <p className="admin-toolbar-help">Uses the first-party experiment analytics API. CSV export is suitable for spreadsheet review and operator snapshots. The sample threshold only affects UI heuristics like leader highlighting and low-sample warnings.</p>
       {error ? <div className="admin-alert admin-alert-error">{error}</div> : null}
     </div>
 
@@ -408,6 +420,8 @@ export default function mount() {
   let trendMetric: TrendMetric = ['ctr', 'exposures', 'clicks'].includes(readStorage(TREND_METRIC_KEY) || '')
     ? readStorage(TREND_METRIC_KEY)! as TrendMetric
     : 'ctr'
+  const storedThreshold = parseInt(readStorage(SAMPLE_THRESHOLD_KEY) || '', 10)
+  let sampleThreshold = SAMPLE_THRESHOLD_OPTIONS.includes(storedThreshold) ? storedThreshold : DEFAULT_SAMPLE_THRESHOLD
   let loading = false
   let error: string | null = null
   let report: ExperimentReport | null = null
@@ -421,6 +435,10 @@ export default function mount() {
       trendGroupBy = groupBy
       writeStorage(TREND_GROUP_BY_KEY, trendGroupBy)
       void loadReport()
+    }} sampleThreshold={sampleThreshold} onSampleThresholdChange={(threshold) => {
+      sampleThreshold = threshold
+      writeStorage(SAMPLE_THRESHOLD_KEY, String(sampleThreshold))
+      renderAll()
     }} />, root)
 
     const experimentSelect = document.getElementById('admin-experiment-id') as HTMLSelectElement | null
@@ -442,6 +460,14 @@ export default function mount() {
       trendGroupBy = groupBySelect.value === 'week' ? 'week' : 'day'
       writeStorage(TREND_GROUP_BY_KEY, trendGroupBy)
       void loadReport()
+    }
+
+    const thresholdSelect = document.getElementById('admin-experiment-threshold') as HTMLSelectElement | null
+    if (thresholdSelect) thresholdSelect.onchange = () => {
+      const next = parseInt(thresholdSelect.value, 10)
+      sampleThreshold = SAMPLE_THRESHOLD_OPTIONS.includes(next) ? next : DEFAULT_SAMPLE_THRESHOLD
+      writeStorage(SAMPLE_THRESHOLD_KEY, String(sampleThreshold))
+      renderAll()
     }
 
     const loadBtn = document.getElementById('admin-experiment-load-btn') as HTMLButtonElement | null
