@@ -88,6 +88,8 @@ type LandingExperimentPayload = {
 const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6']
 const DEFAULT_VISIBLE_HOLDERS = 20
 const encoder = new TextEncoder()
+const VISITOR_ID_KEY = 'geeksy-analytics:visitor-id'
+const SESSION_ID_KEY = 'geeksy-analytics:session-id'
 
 function getPhantomProvider(): PhantomProvider | null {
   const direct = window.solana
@@ -144,7 +146,34 @@ function applyHeroAction(button: HTMLButtonElement | null, action: HeroAction, l
   button.textContent = label
   button.dataset.heroAction = action.type
   button.dataset.heroHref = action.type === 'link' ? action.href : ''
+  button.dataset.heroLabel = label
   if (extraClass) button.className = extraClass
+}
+
+function getOrCreateStorageId(key: string, storage: Storage) {
+  try {
+    const existing = storage.getItem(key)
+    if (existing) return existing
+    const created = crypto.randomUUID()
+    storage.setItem(key, created)
+    return created
+  } catch {
+    return crypto.randomUUID()
+  }
+}
+
+function postExperimentEvent(payload: Record<string, unknown>) {
+  const body = JSON.stringify(payload)
+  if (navigator.sendBeacon) {
+    const blob = new Blob([body], { type: 'application/json' })
+    if (navigator.sendBeacon('/api/analytics/experiment', blob)) return
+  }
+  void fetch('/api/analytics/experiment', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => undefined)
 }
 
 function fmtUsd(n: number) {
@@ -351,7 +380,10 @@ export default function mount() {
   const cleanups: Array<() => void> = []
   const experimentPayload = readInitialJson<LandingExperimentPayload>('landing-experiments-data')
   const heroExperiment = experimentPayload?.heroCtaExperiment || null
+  const visitorId = getOrCreateStorageId(VISITOR_ID_KEY, window.localStorage)
+  const sessionId = getOrCreateStorageId(SESSION_ID_KEY, window.sessionStorage)
   let activeHeroVariant = experimentPayload?.initial.heroCtaVariant || null
+  let trackedExposureKey: string | null = null
   let marketData: MarketData | null = readInitialJson<MarketData>('ssr-market-data')
   let marketLoading = !marketData?.ok
   let gravityData: LeaderboardData | null = readInitialJson<LeaderboardData>('ssr-gravity-data')
@@ -519,6 +551,39 @@ export default function mount() {
     if (claimableEl) claimableEl.textContent = walletSummary ? fmtSol(walletSummary.claimableAmount) : '—'
   }
 
+  const trackHeroExposure = () => {
+    if (!heroExperiment || !activeHeroVariant) return
+    const exposureKey = `${heroExperiment.id}:${activeHeroVariant.id}:${window.location.pathname}`
+    if (trackedExposureKey === exposureKey) return
+    trackedExposureKey = exposureKey
+    postExperimentEvent({
+      experimentId: heroExperiment.id,
+      variantId: activeHeroVariant.id,
+      eventType: 'exposure',
+      path: window.location.pathname,
+      referrer: document.referrer || null,
+      sessionId,
+      visitorId,
+      createdAt: Date.now(),
+    })
+  }
+
+  const trackHeroClick = (ctaId: string, ctaLabel: string) => {
+    if (!heroExperiment || !activeHeroVariant) return
+    postExperimentEvent({
+      experimentId: heroExperiment.id,
+      variantId: activeHeroVariant.id,
+      eventType: 'click',
+      ctaId,
+      ctaLabel,
+      path: window.location.pathname,
+      referrer: document.referrer || null,
+      sessionId,
+      visitorId,
+      createdAt: Date.now(),
+    })
+  }
+
   const applyHeroVariant = () => {
     if (!activeHeroVariant) return
     const badge = document.getElementById('hero-badge')
@@ -548,6 +613,7 @@ export default function mount() {
   const renderAll = () => {
     updateHeroStats()
     applyHeroVariant()
+    trackHeroExposure()
 
     if (marketRoot) render(<MarketPanel data={marketData} loading={marketLoading} />, marketRoot)
 
@@ -567,6 +633,8 @@ export default function mount() {
     if (heroConnect) {
       const action = heroConnect.dataset.heroAction || 'connect'
       heroConnect.onclick = () => {
+        const label = heroConnect.dataset.heroLabel || heroConnect.textContent || 'hero-primary'
+        trackHeroClick('hero-primary', label)
         if (action === 'spin') {
           wheelState = { ...wheelState, open: true, error: null }
           renderAll()
@@ -587,6 +655,8 @@ export default function mount() {
     if (heroSpin) {
       const action = heroSpin.dataset.heroAction || 'spin'
       heroSpin.onclick = () => {
+        const label = heroSpin.dataset.heroLabel || heroSpin.textContent || 'hero-secondary'
+        trackHeroClick('hero-secondary', label)
         if (action === 'connect') {
           void connectWallet()
           return
@@ -598,6 +668,12 @@ export default function mount() {
         }
         wheelState = { ...wheelState, open: true, error: null }
         renderAll()
+      }
+    }
+    const navPrimary = document.getElementById('nav-primary-cta') as HTMLAnchorElement | null
+    if (navPrimary) {
+      navPrimary.onclick = () => {
+        trackHeroClick('nav-primary', navPrimary.textContent || 'nav-primary')
       }
     }
 

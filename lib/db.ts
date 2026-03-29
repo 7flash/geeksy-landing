@@ -29,6 +29,21 @@ db.exec(`
     payload_json TEXT NOT NULL,
     captured_at INTEGER NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS experiment_events (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL,
+    variant_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    cta_id TEXT,
+    cta_label TEXT,
+    path TEXT,
+    referrer TEXT,
+    session_id TEXT,
+    visitor_id TEXT,
+    user_agent TEXT,
+    created_at INTEGER NOT NULL DEFAULT 0
+  );
 `)
 
 // Ensure stardust column exists on gravity_points

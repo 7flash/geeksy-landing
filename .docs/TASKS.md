@@ -59,14 +59,16 @@
 - [x] ~~**Add scripted production rollout helper**~~ - ✅ DONE. Added `scripts/prod-rollout.sh` to automate the `bgrun@3.12.15` upgrade, landing checkout reset, process restarts, health checks, and `[wheel]` log grep before manual Phantom verification.
 - [x] ~~**Fix Windows bgrun local run quirk**~~ - ✅ DONE. Added `scripts/dev-bgrun.ts` plus `npm run dev:bgrun` / `npm run dev:bgrun:dry`, which auto-pick a free local validation port starting at `3412` and launch the landing through `bgrun` without the old `bash -lc` workaround.
 - [x] ~~**Implement A/B testing framework**~~ - ✅ DONE. Added a lightweight experiment layer in `lib/experiments.ts` with query override + cookie/localStorage stickiness, wired hero/nav CTA variants into `app/page.tsx`, and applied client-side variant resolution in `app/page.client.tsx` so landing copy/CTA order can change without restructuring the page.
-- [ ] **Add experiment exposure/click analytics** - Record which hero variant was shown and which CTA was clicked so the new experiment framework can measure outcomes instead of only swapping copy.
+- [x] ~~**Add experiment exposure/click analytics**~~ - ✅ DONE. Added first-party experiment analytics with SQLite-backed `experiment_events`, a POST ingestion route at `/api/analytics/experiment`, and client-side exposure/click beacons for the hero/nav experiment CTAs.
+- [ ] **Add experiment reporting/export surface** - Add an admin/debug route or simple report page to summarize experiment exposures/clicks by variant so operators can evaluate winners without querying SQLite manually.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
 ## 📝 Architecture Notes
 - **Framework**: Melina.js (Bun-native, file-based routing)
 - **Port**: 3400 (configured via BUN_PORT in `.env` for local dev and via process env in production)
-- **Frontend**: Server-rendered landing page with a `page.client.tsx` mount for live market/gravity refresh, Phantom wallet connect, real `/api/wheel/me` summary cards, and a treasury reward-tier wheel driven by signed Phantom challenges
+- **Frontend**: Server-rendered landing page with a `page.client.tsx` mount for live market/gravity refresh, Phantom wallet connect, real `/api/wheel/me` summary cards, a treasury reward-tier wheel driven by signed Phantom challenges, and client-resolved hero experiment variants from `lib/experiments.ts`
+- **Experiment analytics**: first-party events post to `/api/analytics/experiment` and persist in SQLite table `experiment_events` inside `gravity.db`
 - **Dynamic content**: Live market snapshot renders from Dexscreener via `app/api/market/route.ts`; owner balances come from Helius-backed Solana RPC via `app/api/holders/route.ts`; accumulated gravity leaderboard reads from `gravity.db` via `app/api/leaderboard/route.ts`
 - **Wheel backend**: `lib/wheel.ts` manages spendable gravity, challenge generation, signature verification, wheel spin recording, treasury snapshots, and claim placeholders via `/api/wheel/challenge`, `/api/wheel/spin`, `/api/wheel/me`, and `/api/wheel/spins`
 - **Background scoring**: `scripts/gravity-worker.ts` should run under `bgrun` to update `gravity.db` every minute using the current GKSY USD price and live holder balances
