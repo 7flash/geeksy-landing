@@ -247,7 +247,7 @@ function TrendChart({ trend, metric, groupBy, onMetricChange }: { trend: Experim
         <path d={series.path} fill="none" stroke={series.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         {series.rows.map((point) => <g key={`${series.variant}:${point.label}`}>
           <circle cx={point.x} cy={point.y} r="4.5" fill={series.color} />
-          <title>{`${series.variant} · ${point.label} · ${metric === 'ctr' ? fmtPct(point.value) : point.value}`}</title>
+          <title>{`${series.variant} · ${fmtTrendLabel(point.label, groupBy)} · ${metric === 'ctr' ? fmtPct(point.value) : point.value}`}</title>
         </g>)}
       </g>)}
     </svg>

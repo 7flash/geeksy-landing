@@ -75,7 +75,8 @@
 - [x] ~~**Add experiment summary layout polish**~~ - ✅ DONE. The grouped summary now uses a responsive auto-fit grid, keeps cards equal-height, and lets the baseline-state card span wider space on larger screens while collapsing cleanly on narrower widths.
 - [x] ~~**Add experiment trend table labeling polish**~~ - ✅ DONE. `/admin/experiments` now uses a grouping-aware trend column label and short weekly labels like `W13 '26` for faster scanning.
 - [x] ~~**Add experiment trend chart label polish**~~ - ✅ DONE. The SVG trend chart now uses the same grouping-aware label formatter as the table and updates its aria label for daily vs weekly mode.
-- [ ] **Add experiment trend tooltip polish** - Make chart point tooltips use the same shortened grouping-aware period labels for consistency with the axis/table.
+- [x] ~~**Add experiment trend tooltip polish**~~ - ✅ DONE. Chart point tooltips now use the same grouping-aware period labels as the table and x-axis.
+- [ ] **Add experiment metric-specific tooltip wording** - Clarify tooltip wording for CTR vs exposure vs click mode so point values read more naturally.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
