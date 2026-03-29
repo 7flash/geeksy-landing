@@ -1,6 +1,6 @@
 import { Head } from 'melina/server'
 import { db, estimateTokenPriceUsd } from '../lib/db'
-import { getWalletDisplay, getWalletLabel } from '../lib/gksy'
+import { getWalletMeta } from '../lib/gksy'
 import { getMarketSnapshotWithFallback } from '../lib/market-cache'
 
 type MarketSnapshot = {
@@ -35,6 +35,8 @@ type GravitySnapshot = {
     wallet: string
     walletShort: string
     walletLabel: string | null
+    walletDisplay: string
+    walletType: string
     points: number
     stardust: number
     remainingGravity: number
@@ -149,9 +151,7 @@ function getGravitySnapshot(limit = 30, market: MarketSnapshot | null = null): G
   return {
     leaderboard: rows.map((row, i) => ({
       rank: i + 1,
-      wallet: row.wallet,
-      walletShort: getWalletDisplay(row.wallet),
-      walletLabel: getWalletLabel(row.wallet),
+      ...getWalletMeta(row.wallet),
       points: row.points,
       stardust: row.stardust,
       remainingGravity: Math.max(0, row.remainingGravity),
@@ -203,7 +203,7 @@ function GravityFallback({ data }: { data: GravitySnapshot }) {
       <div className="wallet-summary-card"><div className="market-card-label">Scored Holders</div><div className="wallet-summary-value">{data.stats.activeScoredHolders}</div><p>Wallets earning gravity from live balance × USD price.</p></div>
       <div className="wallet-summary-card"><div className="market-card-label">Current Price</div><div className="wallet-summary-value">{fmtUsd(data.priceUsd)}</div><p>{data.scoringRule}</p></div>
     </div>
-    <div className="gravity-hero-table-wrap"><table className="holders-table gravity-hero-table"><thead><tr><th>#</th><th>Wallet</th><th>✦ Stardust</th><th>⬡ Gravity</th><th>Balance</th><th>$/min</th></tr></thead><tbody>{data.leaderboard.map((row) => <tr key={row.wallet}><td>{row.rank}</td><td><code>{row.walletShort}</code></td><td className="stardust-cell">{fmtPoints(row.stardust)}</td><td className="gravity-cell">{fmtPoints(row.remainingGravity)}</td><td>{fmtTokenAmount(row.balance)}</td><td>{fmtUsd(row.usdPerMinute)}</td></tr>)}</tbody></table></div>
+    <div className="gravity-hero-table-wrap"><table className="holders-table gravity-hero-table"><thead><tr><th>#</th><th>Wallet</th><th>✦ Stardust</th><th>⬡ Gravity</th><th>Balance</th><th>$/min</th></tr></thead><tbody>{data.leaderboard.map((row) => <tr key={row.wallet}><td>{row.rank}</td><td><div className="wallet-entity-cell"><div className="wallet-entity-top"><strong>{row.walletDisplay}</strong><span className={`wallet-entity-badge wallet-entity-${row.walletType || 'holder'}`}>{row.walletType === 'treasury' ? 'Treasury' : row.walletType === 'lp' ? 'LP' : row.walletType === 'bonding_curve' ? 'Bonding Curve' : row.walletType === 'exchange' ? 'Exchange' : row.walletType === 'team' ? 'Team' : row.walletType === 'internal' ? 'Internal' : 'Holder'}</span></div><code className="wallet-entity-address">{row.walletShort}</code></div></td><td className="stardust-cell">{fmtPoints(row.stardust)}</td><td className="gravity-cell">{fmtPoints(row.remainingGravity)}</td><td>{fmtTokenAmount(row.balance)}</td><td>{fmtUsd(row.usdPerMinute)}</td></tr>)}</tbody></table></div>
   </div>
 }
 

@@ -12,6 +12,8 @@ const BUILTIN_WALLET_LABELS: Record<string, string> = {
   'FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM': 'GKSY LP',
 }
 
+export type WalletEntityType = 'treasury' | 'lp' | 'bonding_curve' | 'exchange' | 'team' | 'internal' | 'holder'
+
 function isWalletLike(value: string | undefined | null) {
   const v = (value || '').trim()
   return !!v && v.length >= 32
@@ -82,8 +84,32 @@ export function getWalletLabel(wallet: string) {
   return getKnownWalletLabels()[wallet] || null
 }
 
+export function getWalletType(wallet: string): WalletEntityType {
+  const label = (getWalletLabel(wallet) || '').toLowerCase()
+  if (!label) return 'holder'
+  if (label.includes('treasury')) return 'treasury'
+  if (label.includes('lp') || label.includes('liquidity')) return 'lp'
+  if (label.includes('bonding')) return 'bonding_curve'
+  if (label.includes('exchange') || label.includes('cex')) return 'exchange'
+  if (label.includes('team')) return 'team'
+  if (label.includes('internal') || label.includes('ops')) return 'internal'
+  return 'holder'
+}
+
 export function getWalletDisplay(wallet: string) {
   return getWalletLabel(wallet) || shortWalletLabel(wallet)
+}
+
+export function getWalletMeta(wallet: string) {
+  const label = getWalletLabel(wallet)
+  const type = getWalletType(wallet)
+  return {
+    wallet,
+    walletShort: shortWalletLabel(wallet),
+    walletLabel: label,
+    walletDisplay: label || shortWalletLabel(wallet),
+    walletType: type,
+  }
 }
 
 export type OwnerBalanceRow = {

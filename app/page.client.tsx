@@ -30,7 +30,7 @@ type MarketData = {
 }
 
 type LeaderboardRow = {
-  rank: number; wallet: string; walletShort: string; walletLabel?: string | null
+  rank: number; wallet: string; walletShort: string; walletLabel?: string | null; walletDisplay?: string; walletType?: string
   points: number; stardust: number; remainingGravity: number; totalSpent: number
   streakMinutes: number; balance: number; usdPerMinute: number; lastCreditedAt: number
 }
@@ -211,6 +211,18 @@ function ClaimsPanel({ claims, wallet, loading, onClaim, claimSubmitting, summar
   </div>
 }
 
+function entityBadgeLabel(type?: string) {
+  switch (type) {
+    case 'treasury': return 'Treasury'
+    case 'lp': return 'LP'
+    case 'bonding_curve': return 'Bonding Curve'
+    case 'exchange': return 'Exchange'
+    case 'team': return 'Team'
+    case 'internal': return 'Internal'
+    default: return 'Holder'
+  }
+}
+
 function GravityHeroPanel({ rows, wallet, summary, recentSpins, mySpins, claims, claimsLoading, claimSubmitting, expanded, onClaim }: {
   rows: LeaderboardRow[]; wallet: string | null; summary: WalletSummaryData | null
   recentSpins: SpinRow[]; mySpins: SpinRow[]; claims: ClaimRow[]
@@ -255,7 +267,15 @@ function GravityHeroPanel({ rows, wallet, summary, recentSpins, mySpins, claims,
         <thead><tr><th>#</th><th>Wallet</th><th>✦ Stardust</th><th>⬡ Gravity</th><th>Balance</th><th>$/min</th></tr></thead>
         <tbody>{visibleRows.map((row) => <tr key={row.wallet} className={wallet === row.wallet ? 'active-wallet-row' : ''}>
           <td>{row.rank}</td>
-          <td><code>{row.walletLabel || row.walletShort}</code></td>
+          <td>
+            <div className="wallet-entity-cell">
+              <div className="wallet-entity-top">
+                <strong>{row.walletDisplay || row.walletLabel || row.walletShort}</strong>
+                <span className={`wallet-entity-badge wallet-entity-${row.walletType || 'holder'}`}>{entityBadgeLabel(row.walletType)}</span>
+              </div>
+              <code className="wallet-entity-address">{row.walletShort}</code>
+            </div>
+          </td>
           <td className="stardust-cell">{fmtPoints(row.stardust)}</td>
           <td className="gravity-cell">{fmtPoints(row.remainingGravity)}</td>
           <td>{fmtTokenAmount(row.balance)}</td>

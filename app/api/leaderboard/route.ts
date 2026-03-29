@@ -1,5 +1,5 @@
 import { db, estimateTokenPriceUsd } from '../../../lib/db'
-import { getWalletDisplay, getWalletLabel } from '../../../lib/gksy'
+import { getWalletMeta } from '../../../lib/gksy'
 import { getMarketSnapshotWithFallback } from '../../../lib/market-cache'
 
 export async function GET(req: Request) {
@@ -75,9 +75,7 @@ export async function GET(req: Request) {
   return Response.json({
     leaderboard: rows.map((row, i) => ({
       rank: i + 1,
-      wallet: row.wallet,
-      walletShort: getWalletDisplay(row.wallet),
-      walletLabel: getWalletLabel(row.wallet),
+      ...getWalletMeta(row.wallet),
       points: row.points,
       stardust: row.stardust,
       remainingGravity: Math.max(0, row.remainingGravity),
