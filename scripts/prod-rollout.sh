@@ -3,7 +3,7 @@ set -euo pipefail
 
 HOST="${1:-root@202.155.132.139}"
 APP_DIR="${APP_DIR:-/opt/geeksy-landing}"
-BGRUN_VERSION="${BGRUN_VERSION:-3.12.13}"
+BGRUN_VERSION="${BGRUN_VERSION:-3.12.15}"
 LANDING_PROCESS="${LANDING_PROCESS:-geeksy-landing}"
 GRAVITY_PROCESS="${GRAVITY_PROCESS:-geeksy-gravity}"
 DOMAIN="${DOMAIN:-https://geeksy.xyz}"

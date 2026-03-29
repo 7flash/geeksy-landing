@@ -26,15 +26,15 @@ bash scripts/prod-rollout.sh root@202.155.132.139
 
 The manual steps below are what `scripts/prod-rollout.sh` automates.
 
-`bgrun@3.12.12` had a packaging bug: the published tarball missed `dashboard/lib/runtime.ts`.
-Upgrade production installs to `3.12.13` or newer before restarting anything.
+`bgrun@3.12.12` had a packaging bug: the published tarball missed `dashboard/lib/runtime.ts`, and the installed-package smoke coverage was stabilized in `3.12.15`.
+Upgrade production installs to `3.12.15` or newer before restarting anything.
 
 ```bash
 ssh root@202.155.132.139
 npm view bgrun version
 which bgrun || which bgr
 bgrun --version || bgr --version
-bun install -g bgrun@3.12.13
+bun install -g bgrun@3.12.15
 bgrun --version
 ```
 
