@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, ...result })
   } catch (error: any) {
     const message = error?.message || 'Failed to submit claim request'
-    const status = /Wallet mismatch|expired|signature|No pending rewards|already used|no longer claimable|mismatch|not found/.test(message) ? 400 : 500
+    const status = /Wallet mismatch|expired|signature|No pending rewards|already used|no longer claimable|mismatch|not found|public key|encoding/i.test(message) ? 400 : 500
     return Response.json({ ok: false, error: message }, { status })
   }
 }

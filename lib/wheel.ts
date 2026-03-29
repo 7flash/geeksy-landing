@@ -324,18 +324,30 @@ function chooseTierWeighted(randomFloat: number, gravityShare: number) {
   return WHEEL_TIERS[WHEEL_TIERS.length - 1]
 }
 
-function b64ToBytes(value: string) {
-  return Uint8Array.from(Buffer.from(value, 'base64'))
+function decodeBase64Loose(value: string) {
+  const normalized = value.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  if (!normalized) throw new Error('Empty base64 value')
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4 || 4)) % 4)
+  return Uint8Array.from(Buffer.from(padded, 'base64'))
+}
+
+function decodeHex(value: string) {
+  const normalized = value.trim().replace(/^0x/i, '')
+  if (!normalized || normalized.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(normalized)) {
+    throw new Error('Invalid hex string')
+  }
+  return Uint8Array.from(Buffer.from(normalized, 'hex'))
 }
 
 function base58Decode(input: string) {
+  const value = input.trim()
   const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
   const base = 58
   const bytes = [0]
-  for (const char of input) {
-    const value = alphabet.indexOf(char)
-    if (value < 0) throw new Error('Invalid base58 string')
-    let carry = value
+  for (const char of value) {
+    const digit = alphabet.indexOf(char)
+    if (digit < 0) throw new Error('Invalid base58 string')
+    let carry = digit
     for (let i = 0; i < bytes.length; i++) {
       const x = bytes[i]! * base + carry
       bytes[i] = x & 0xff
@@ -346,18 +358,55 @@ function base58Decode(input: string) {
       carry >>= 8
     }
   }
-  for (const char of input) {
+  for (const char of value) {
     if (char === '1') bytes.push(0)
     else break
   }
   return Uint8Array.from(bytes.reverse())
 }
 
-export async function verifyWalletSignature(wallet: string, message: string, signatureB64: string) {
-  const publicKeyRaw = base58Decode(wallet)
-  const signature = b64ToBytes(signatureB64)
-  const key = await crypto.subtle.importKey('raw', publicKeyRaw, { name: 'Ed25519' }, false, ['verify'])
-  return await crypto.subtle.verify('Ed25519', key, signature, encoder.encode(message))
+function parseSignatureBytes(signature: string) {
+  const value = signature.trim()
+  const decoders = [
+    () => decodeBase64Loose(value),
+    () => decodeHex(value),
+    () => base58Decode(value),
+  ]
+
+  for (const decode of decoders) {
+    try {
+      const bytes = decode()
+      if (bytes.length === 64) return bytes
+    } catch {}
+  }
+
+  throw new Error('Invalid wallet signature encoding')
+}
+
+export async function verifyWalletSignature(wallet: string, message: string, signatureValue: string) {
+  const trimmedWallet = wallet.trim()
+  if (!trimmedWallet) throw new Error('Wallet is required')
+
+  let publicKeyRaw: Uint8Array
+  try {
+    publicKeyRaw = base58Decode(trimmedWallet)
+  } catch {
+    throw new Error('Invalid wallet public key')
+  }
+  if (publicKeyRaw.length !== 32) {
+    throw new Error('Invalid wallet public key length')
+  }
+
+  const publicKeyBytes = Uint8Array.from(publicKeyRaw)
+  const signatureBytes = Uint8Array.from(parseSignatureBytes(signatureValue))
+  const messageBytes = Uint8Array.from(encoder.encode(message))
+
+  try {
+    const key = await crypto.subtle.importKey('raw', publicKeyBytes, { name: 'Ed25519' }, false, ['verify'])
+    return await crypto.subtle.verify('Ed25519', key, signatureBytes, messageBytes)
+  } catch {
+    throw new Error('Failed to verify wallet signature')
+  }
 }
 
 export async function consumeSpinChallenge(wallet: string, challengeId: string, signature: string) {

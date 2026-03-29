@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, ...result })
   } catch (error: any) {
     const message = error?.message || 'Failed to spin wheel'
-    const status = /Challenge|Wallet mismatch|expired|signature|Insufficient/.test(message) ? 400 : 500
+    const status = /Challenge|Wallet mismatch|expired|signature|Insufficient|public key|encoding/i.test(message) ? 400 : 500
     return Response.json({ ok: false, error: message }, { status })
   }
 }
