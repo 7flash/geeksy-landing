@@ -1,0 +1,74 @@
+# Geeksy Landing - Tasks & Ideas
+
+## 🔴 Priority: Fix
+- [x] ~~**Fix landing page port configuration**~~ - ✅ DONE. Corrected .env file from BUN_PORT=3737 to BUN_PORT=3400 to avoid conflicts with main geeksy app. Landing page now runs on port 3400 as intended.
+- [x] ~~**Harden Phantom wallet detection + signature verification**~~ - ✅ DONE. The client now detects Phantom via both `window.solana` and `window.phantom.solana`, surfaces connect/sign errors, auto-restores trusted sessions, and the backend signature verifier now accepts base64/base64url/hex/base58 signatures with focused validation plus regression tests in `lib/wheel.test.ts`.
+
+## 🟡 Priority: Improve
+- [ ] **Add SSL/HTTPS support** - Configure SSL certificates for production deployment to ensure secure connections for geeksy.xyz visitors.
+- [ ] **Optimize landing page performance** - Implement asset optimization, lazy loading, and caching strategies to improve load times.
+- [ ] **Add analytics tracking** - Integrate analytics to track visitor engagement, conversion rates, and user journey metrics.
+- [x] ~~**Add og:image and social preview assets**~~ - ✅ DONE. Added a dynamic `/spin/:id` share route with per-spin Open Graph/Twitter metadata and a generated `/api/og/spin/:id` preview image, plus a default share image for the home page.
+- [ ] **Polish branded social art direction** - Current social previews are dynamic and functional, but they still need more refined visual branding, typography, and richer token/wheel graphics.
+
+## 🟢 Priority: Features
+- [x] ~~**Migrate standalone landing repo to Melina chat-demo site**~~ - ✅ DONE. Replaced the old anti-cloud/gravity landing with the dedicated Geeksy marketing landing, added client-side copy CTA behavior, and updated CTAs to point at the app domain.
+- [x] ~~**Deploy landing page with bgrun**~~ - ✅ DONE. Pushed `7flash/geeksy-landing`, cloned it to `/opt/geeksy-landing` on the server, disabled the temporary `systemd` shim, and launched the real landing with `bgrun` on port `3400` behind `geeksy.xyz`.
+- [x] ~~**Add app.geeksy.xyz routing**~~ - ✅ DONE. Added Caddy routing for `app.geeksy.xyz` → `localhost:3737`, and the main app now opens separately from the landing.
+- [x] ~~**Add DNS record for app.geeksy.xyz**~~ - ✅ DONE. The subdomain already existed and now resolves correctly to the server for the app CTA.
+- [x] ~~**Combine chat-demo hero with old deep content + leaderboard**~~ - ✅ DONE. Restored the deeper anti-cloud stack narrative while keeping the Geeksy chat-demo hero and CTA at the top.
+- [x] ~~**Replace broken top token blocks with Dexscreener market section**~~ - ✅ DONE. Removed the awkward top-stacked leaderboard layout and replaced it with a single `GKSY Market Snapshot` section fed by Dexscreener for token `9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS`.
+- [x] ~~**Add true holder leaderboard source**~~ - ✅ DONE. Added `app/api/holders/route.ts` using the Helius-backed Solana RPC endpoint discovered from env / known `.config.toml` paths, resolving owner-level balances for the real GKSY token `9rcxe6nSq9GT56KyGV8QHhBYKgjNaGmW2JyDDfsZBAGS`.
+- [x] ~~**Implement minute-by-minute gravity scoring**~~ - ✅ DONE. Added `scripts/gravity-worker.ts` plus shared `lib/gksy.ts` fetch logic so every minute the worker fetches live GKSY balances + USD price, credits `gravity_points += balance * priceUsd`, updates `holder_snapshots`, and powers `/api/leaderboard` from accumulated score instead of plain current balance.
+- [x] ~~**Deploy gravity worker with bgrun on the server**~~ - ✅ DONE. The minute-based `scripts/gravity-worker.ts` now runs in production as `bgrun` process `geeksy-gravity` alongside the landing web server.
+- [x] ~~**Add weighted gravity wheel modal**~~ - ✅ DONE. Added a client-side `Spin the Wheel` CTA that opens a half-wheel modal, animates rotation, and picks a weighted random winner using the current displayed gravity leaderboard scores.
+- [ ] **Label/clean gravity leaderboard entities** - Detect treasury, LP, bonding-curve, exchange, and internal wallets so the leaderboard reads as human-meaningful entities instead of only raw wallet addresses. Known LP wallet `FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM` is already excluded from scoring.
+- [x] ~~**Make gravity dashboard the first hero slide**~~ - ✅ DONE. Rebuilt the first screen into a cosmic gravity dashboard hero with leaderboard table, Phantom connect CTA, personal wallet summary cards, and wheel entry point. The Geeksy stack story now continues below the fold.
+- [x] ~~**Back wallet claim/spend cards with real ledger logic**~~ - ✅ DONE. Added wallet-authenticated claim request challenges, signed `/api/wheel/claim` submission, `/api/wheel/claims` history, requested-vs-claimable summary fields, and hero UI wiring for `Request Claim` plus visible claim history.
+- [x] ~~**Implement payout execution/admin settlement flow**~~ - ✅ DONE. Added admin-token-protected claim queue + settlement endpoints so requested claims can be listed and moved to `claimed` / `failed` with stored payout tx signatures.
+- [x] ~~**Build admin payout UI or worker automation**~~ - ✅ DONE. Added a token-gated `/admin/claims` settlement console so operators can load requested/claimed/failed batches and mark requests `claimed` / `failed` without raw HTTP calls.
+- [x] ~~**Build payout worker / treasury executor**~~ - ✅ DONE. Added `scripts/payout-worker.ts`, a queue-driven executor that reads requested claim batches from SQLite, invokes an external treasury payout command with JSON payloads, and settles each batch to `claimed` / `failed` based on the command result.
+- [x] ~~**Replace env treasury basis with a live snapshot command path**~~ - ✅ DONE. The wheel now supports `TREASURY_SOURCE=command` plus `TREASURY_SNAPSHOT_COMMAND`, so challenge creation can record live treasury token/amount snapshots from an external balance reader instead of a fixed env amount.
+- [ ] **Plug the payout worker into a real treasury sender** - The worker is now automation-ready, but it still needs a real payout command implementation that signs/transmits treasury sends instead of a mock/manual executor.
+- [x] ~~**Plug treasury snapshots into a real balance reader**~~ - ✅ DONE. Added `scripts/treasury-snapshot.ts`, an RPC-backed balance reader that can return live SPL-token or SOL balances for use through `TREASURY_SNAPSHOT_COMMAND`.
+- [ ] **Configure production treasury wallet/mint for live snapshots** - The RPC-backed snapshot reader exists now, but production is still using env mode until the real treasury wallet/token env vars are provided and `TREASURY_SOURCE=command` is enabled.
+- [x] ~~**Design on-chain wheel transaction flow**~~ - ✅ DONE. Added `docs/WHEEL_TX_FLOW.md` with the recommended phased architecture: wallet challenge/signature flow first, spendable gravity ledger, wheel spin records, treasury snapshots, claim records, security requirements, and later migration path toward a real transaction/program-backed spin.
+- [x] ~~**Implement gravity spend/claim ledger tables**~~ - ✅ DONE. Added SQLite-backed wheel foundation in `lib/wheel.ts` for `wallet_gravity_ledger`, `wheel_challenges`, `wheel_spins`, `treasury_snapshots`, and `wheel_claims`, with spendable gravity derived from earned minus spent.
+- [x] ~~**Implement wallet-authenticated spin challenge API**~~ - ✅ DONE. Added `/api/wheel/challenge`, `/api/wheel/spin`, and `/api/wheel/me` with one-time challenge creation, Ed25519 wallet-signature verification, gravity spend deduction, treasury reward recording, and wallet summary reads.
+- [x] ~~**Wire real Phantom wheel flow into the hero UI**~~ - ✅ DONE. The hero wallet cards now pull from `/api/wheel/me`, the wheel is now a treasury reward-tier wheel, and the UI is wired for Phantom `signMessage` → `/api/wheel/challenge` → `/api/wheel/spin` instead of the old fake winner-wheel flow.
+- [x] ~~**Deploy the stardust leaderboard + Phantom wheel landing refresh**~~ - ✅ DONE. Pushed commit `1875c57`, hard-reset `/opt/geeksy-landing` to `origin/master`, restarted `geeksy-landing`, restored `caddy` + `geeksy` after a bad `geeksy-gravity` restart side effect, and verified `geeksy.xyz` now serves the new Hold GKSY / Connect Phantom / Spin the Wheel hero plus `/api/leaderboard` stardust fields and `/api/wheel/me` SOL metadata in production.
+- [ ] **Live-test full Phantom signing flow in a real wallet browser** - Production code is ready, but it still needs one real browser with Phantom installed to verify `signMessage`, spin animation, backend burn-to-stardust ledger updates, and claim-state refresh against the live routes. Debugging is now easier because the wheel API routes emit structured `[wheel] ...` logs for challenge/spin/claim requests and failures, and `docs/DEPLOY.md` now documents the exact `bgrun@3.12.13` upgrade + redeploy + log-grep workflow.
+- [x] ~~**Fix bgrun restart false-positive port killing for `geeksy-gravity`**~~ - ✅ DONE. Root-caused the issue to bgrun's Unix `lsof` fallback (`lsof -i -P -n -p ${pid}`) returning unrelated listeners for no-port worker processes. Patched the server's installed bgrun (`src/platform.ts` + `dist/index.js`) to use `lsof -Pan -p ${pid} -iTCP -sTCP:LISTEN`, then safely restarted `geeksy-gravity` without killing `caddy`, `geeksy`, or `geeksy-landing`.
+- [x] ~~**Upstream the bgrun Unix no-port restart fix**~~ - ✅ DONE. The Unix `lsof -Pan -p <pid> -iTCP -sTCP:LISTEN` fix was applied in the real `bgrun` repo, regression-tested, and published upstream. The operational follow-up is now upgrading production installs to `bgrun@3.12.13` so the server gets both the safe Unix restart behavior and the dashboard runtime packaging fix.
+- [ ] **Upgrade production server to `bgrun@3.12.13` before Phantom testing** - The live server should move off older `bgrun` installs before restarting landing/gravity processes because `3.12.12` had a packaging bug and `3.12.13` is the verified fixed release.
+- [x] ~~**Persist/share wheel results**~~ - ✅ DONE. Added `/api/wheel/spins` plus hero-side `Recent Spins` / `Your Spins` panels so wheel outcomes persist visually instead of disappearing after the modal closes.
+- [x] ~~**Add permalinks/share cards for notable spins**~~ - ✅ DONE. Added a featured spin card in the hero with `Copy Permalink` behavior and direct `?spin=<id>` deep-link support using `/api/wheel/spins?id=...`.
+- [x] ~~**Add social-ready share text/actions for spin results**~~ - ✅ DONE. Featured spins now expose polished promo copy, `Copy Share Text`, native `Share`, and `Share on X` actions on top of permalink deep links.
+- [ ] **Add social preview images for spin results** - Share text/actions exist now, but notable spins still need richer `og:image` / preview-card assets for X, Telegram, and Discord.
+- [x] ~~**Add wallet labels in leaderboard + wheel**~~ - ✅ DONE. Added shared wallet display/label helpers in `lib/gksy.ts` and threaded readable wallet display fields through leaderboard, spin history, and claim history payloads so the UI can show named entities where known and cleaner short forms otherwise.
+- [x] ~~**Expand the known-wallet registry**~~ - ✅ DONE. Added a configurable wallet registry layer that merges built-in labels, optional `KNOWN_WALLETS_PATH` JSON entries, and env-provided wallet labels such as treasury/team/bonding-curve/exchange hints.
+- [ ] **Populate production wallet labels** - The registry system exists now, but production still needs real wallet addresses filled in for treasury, team, exchange, bonding-curve, and other notable entities.
+- [x] ~~**Add SSR fallback for market + gravity sections**~~ - ✅ DONE. Added shared `lib/market-cache.ts` live-or-cached snapshot helpers, switched the page SSR path to fetch market data server-side with stale-cache fallback, and updated `/api/market` + `/api/leaderboard` to reuse the same cache-aware strategy instead of depending on a first client refresh.
+- [x] ~~**Add stale-market UI hint**~~ - ✅ DONE. Both SSR and client-rendered market panels now show a clear cached-data notice when the landing is serving warm cache or stale Dexscreener fallback snapshots.
+- [ ] **Fix Windows bgrun local run quirk** - Direct local `bgrun --command "bun run server.ts"` on port `3400` is colliding with a stale Bun listener on this machine; `bgrun` validation works reliably via `bash -lc 'BUN_PORT=3412 bun run server.ts'` for now.
+- [ ] **Implement A/B testing framework** - Add capability to test different versions of the landing page to optimize conversion rates.
+- [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
+- [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
+
+## 📝 Architecture Notes
+- **Framework**: Melina.js (Bun-native, file-based routing)
+- **Port**: 3400 (configured via BUN_PORT in `.env` for local dev and via process env in production)
+- **Frontend**: Server-rendered landing page with a `page.client.tsx` mount for live market/gravity refresh, Phantom wallet connect, real `/api/wheel/me` summary cards, and a treasury reward-tier wheel driven by signed Phantom challenges
+- **Dynamic content**: Live market snapshot renders from Dexscreener via `app/api/market/route.ts`; owner balances come from Helius-backed Solana RPC via `app/api/holders/route.ts`; accumulated gravity leaderboard reads from `gravity.db` via `app/api/leaderboard/route.ts`
+- **Wheel backend**: `lib/wheel.ts` manages spendable gravity, challenge generation, signature verification, wheel spin recording, treasury snapshots, and claim placeholders via `/api/wheel/challenge`, `/api/wheel/spin`, `/api/wheel/me`, and `/api/wheel/spins`
+- **Background scoring**: `scripts/gravity-worker.ts` should run under `bgrun` to update `gravity.db` every minute using the current GKSY USD price and live holder balances
+- **Repo**: `https://github.com/7flash/geeksy-landing`
+- **Deployment target**: `/opt/geeksy-landing` on server `202.155.132.139`
+- **Process manager**: bgrun process `geeksy-landing` for the main landing; local validation on this Windows machine currently works reliably with `bgrun --name geeksy-landing-bash --command "bash -lc 'BUN_PORT=3412 bun run server.ts'" --directory C:/Code/geeksy-landing`
+- **Current domain**: `geeksy.xyz` → landing on port `3400`
+- **App domain**: `app.geeksy.xyz` → main app on port `3737`
+
+## ⚠️ Security Reminders
+- Keep API keys and sensitive data in environment variables, never commit to repository
+- Sanitize all user inputs before displaying on the page
+- Implement proper CSP headers to prevent XSS attacksr CSP headers to prevent XSS attacks

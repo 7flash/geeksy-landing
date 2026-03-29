@@ -10,30 +10,55 @@ This is the fastest safe path to push the latest landing changes to production a
 - Domain: `https://geeksy.xyz`
 - Reverse proxy: Caddy → port `3400`
 
-## 1. Update the server checkout
+## 1. Upgrade the server to the fixed `bgrun` release first
+
+`bgrun@3.12.12` had a packaging bug: the published tarball missed `dashboard/lib/runtime.ts`.
+Upgrade production installs to `3.12.13` or newer before restarting anything.
 
 ```bash
 ssh root@202.155.132.139
+npm view bgrun version
+which bgrun || which bgr
+bgrun --version || bgr --version
+bun install -g bgrun@3.12.13
+bgrun --version
+```
+
+If the machine uses a different global install path, verify the active binary after install:
+
+```bash
+which bgrun
+ls -l $(which bgrun)
+```
+
+## 2. Update the server checkout
+
+```bash
 cd /opt/geeksy-landing
 git fetch origin
 git status --short
-git log --oneline -3
+git log --oneline -5
 git reset --hard origin/master
 ```
 
 Expected latest commits include:
 
+- `a64f0d3` `feat: show cached market snapshot status`
+- `4518986` `fix: add cache-aware market SSR fallback`
+- `10d3c83` `docs: add landing deployment runbook`
 - `fa83dab` `fix: add wheel flow diagnostics`
 - `373e324` `fix: harden wheel signature verification`
 - `406bd39` `fix: harden Phantom wallet detection and signing`
 
-## 2. Restart the landing process
+## 3. Restart the landing-related processes
 
 Use the safest known restart pattern for this server.
 
 ```bash
 bgrun restart geeksy-landing
-bgrun status geeksy-landing
+bgrun restart geeksy-gravity
+bgrun geeksy-landing
+bgrun geeksy-gravity
 ```
 
 If restart behaves oddly, verify the process is actually healthy before touching anything else:
@@ -41,9 +66,10 @@ If restart behaves oddly, verify the process is actually healthy before touching
 ```bash
 curl -I https://geeksy.xyz
 curl -s https://geeksy.xyz/api/leaderboard?limit=3 | head
+curl -s https://geeksy.xyz/api/market | head
 ```
 
-## 3. Live Phantom test checklist
+## 4. Live Phantom test checklist
 
 Open `https://geeksy.xyz` in a browser with Phantom installed.
 
@@ -58,7 +84,7 @@ Verify:
 7. Request claim succeeds
 8. Refresh and confirm claim state persists
 
-## 4. Inspect structured wheel logs during failures
+## 5. Inspect structured wheel logs during failures
 
 The wheel API now emits structured log lines prefixed with `[wheel]`.
 
@@ -88,7 +114,7 @@ The logs include safe debugging metadata only:
 - reward tier / amount
 - error message + HTTP status
 
-## 5. Quick API spot checks from the server
+## 6. Quick API spot checks from the server
 
 If the UI is unclear, test the read endpoints directly:
 
@@ -99,7 +125,7 @@ curl -s "https://geeksy.xyz/api/wheel/spins?wallet=<WALLET>&limit=5"
 curl -s "https://geeksy.xyz/api/wheel/claims?wallet=<WALLET>&limit=5"
 ```
 
-## 6. If the wheel still fails
+## 7. If the wheel still fails
 
 Use the first failing stage to narrow it down:
 
