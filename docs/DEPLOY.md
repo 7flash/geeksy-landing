@@ -116,6 +116,30 @@ This checks:
 
 Fix any reported preflight errors before continuing.
 
+### Payout command template
+
+If you do not yet have a real treasury sender wired in, start from:
+
+```bash
+cd /opt/geeksy-landing
+bun run scripts/payout-command.example.ts
+```
+
+The worker/preflight command contract is:
+- JSON request via `stdin`
+- JSON response via `stdout`
+- respond with either:
+  - `{ "status": "claimed", "txSignature": "..." }`
+  - or `{ "status": "failed", "reason": "..." }`
+
+To test the happy-path contract locally without a real sender:
+
+```bash
+PAYOUT_TEMPLATE_MODE=claimed bun run scripts/payout-command.example.ts <<'EOF'
+{"requestId":"demo","wallet":"demo-wallet","amount":0.1,"token":"SOL","claimCount":1,"claimIds":["demo-claim"],"createdAt":0,"updatedAt":0}
+EOF
+```
+
 ## 5. Populate production wallet labels (recommended before live testing)
 
 The leaderboard now supports readable entity names and badges (`Treasury`, `LP`, `Team`, `Bonding Curve`, `Exchange`, `Internal`).
