@@ -92,7 +92,7 @@ function fmtDateRange(from: number, to: number) {
 }
 
 function buildVariantComparison(report: ExperimentReport | null, sampleThreshold: number, baselineMode: BaselineMode) {
-  if (!report) return { rows: [], baselineVariantId: null as string | null, baselineLabel: 'No baseline', controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
+  if (!report) return { rows: [], baselineVariantId: null as string | null, baselineLabel: 'No baseline', baselineDescription: 'Load a report to inspect baseline comparisons.', controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
 
   const control = report.variants.find((variant) => variant.variantId === 'control') || null
   const controlVariantId = control?.variantId || null
@@ -109,10 +109,18 @@ function buildVariantComparison(report: ExperimentReport | null, sampleThreshold
     : baselineMode === 'leader'
       ? (baseline ? 'Δ vs Leader' : 'Δ vs Leader (unavailable)')
       : 'No baseline'
+  const baselineDescription = baselineMode === 'none'
+    ? 'Delta comparisons are intentionally disabled for this view.'
+    : baseline
+      ? `Using ${baseline.variantId} as the comparison baseline.`
+      : baselineMode === 'control'
+        ? 'No control variant is present in this report window.'
+        : 'No sufficiently sampled leader is available for this report window.'
 
   return {
     baselineVariantId: baseline?.variantId || null,
     baselineLabel,
+    baselineDescription,
     controlVariantId,
     leaderVariantId: leader?.variantId || null,
     sampleHint: lowSampleCount > 0
@@ -137,9 +145,9 @@ function ReportMetricCard({ label, value, sub }: { label: string; value: string 
   </div>
 }
 
-function buildPeriodSummary(report: ExperimentReport | null) {
+function buildPeriodSummary(report: ExperimentReport | null, baselineMode: BaselineMode, sampleThreshold: number) {
   if (!report?.trend.length) {
-    return { currentLabel: null as string | null, previousLabel: null as string | null, leader: null as null | { variantId: string; ctr: number }, controlDelta: null as number | null, leaderDelta: null as number | null }
+    return { currentLabel: null as string | null, previousLabel: null as string | null, leader: null as null | { variantId: string; ctr: number }, controlDelta: null as number | null, leaderDelta: null as number | null, baselineTitle: 'Baseline comparison', baselineMessage: 'Need trend data to compare grouped periods.' }
   }
 
   const labels = Array.from(new Set(report.trend.map((row) => row.label))).sort((a, b) => b.localeCompare(a))
@@ -147,10 +155,25 @@ function buildPeriodSummary(report: ExperimentReport | null) {
   const previousLabel = labels[1] || null
   const currentRows = report.trend.filter((row) => row.label === currentLabel)
   const previousRows = report.trend.filter((row) => row.label === previousLabel)
-  const leader = currentRows.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
+  const sampledCurrentRows = currentRows.filter((row) => row.exposures >= sampleThreshold)
+  const leader = sampledCurrentRows.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
   const currentControl = currentRows.find((row) => row.variantId === 'control') || null
   const previousControl = previousRows.find((row) => row.variantId === 'control') || null
   const previousLeader = leader ? previousRows.find((row) => row.variantId === leader.variantId) || null : null
+  const baselineTitle = baselineMode === 'none'
+    ? 'Baseline disabled'
+    : baselineMode === 'control'
+      ? 'Control baseline'
+      : 'Leader baseline'
+  const baselineMessage = baselineMode === 'none'
+    ? 'Period-over-period baseline comparison is intentionally disabled in this view.'
+    : baselineMode === 'control'
+      ? (currentControl && previousControl
+          ? 'Control movement is available for the current and previous grouped periods.'
+          : 'Control baseline is unavailable in one or both grouped periods.')
+      : (leader && previousLeader
+          ? 'Current leader momentum is available against the previous grouped period.'
+          : `Leader baseline is unavailable because no sufficiently sampled leader met the ${sampleThreshold}-exposure threshold across grouped periods.`)
 
   return {
     currentLabel,
@@ -158,6 +181,8 @@ function buildPeriodSummary(report: ExperimentReport | null) {
     leader: leader ? { variantId: leader.variantId, ctr: leader.ctr } : null,
     controlDelta: currentControl && previousControl ? currentControl.ctr - previousControl.ctr : null,
     leaderDelta: leader && previousLeader ? leader.ctr - previousLeader.ctr : null,
+    baselineTitle,
+    baselineMessage,
   }
 }
 
@@ -254,7 +279,7 @@ function AdminExperimentsApp({
   onBaselineModeChange: (mode: BaselineMode) => void
 }) {
   const comparison = buildVariantComparison(report, sampleThreshold, baselineMode)
-  const periodSummary = buildPeriodSummary(report)
+  const periodSummary = buildPeriodSummary(report, baselineMode, sampleThreshold)
   return <div className="admin-claims-shell">
     <div className="admin-toolbar-card">
       <div className="admin-toolbar-grid admin-experiments-toolbar-grid">
@@ -328,7 +353,7 @@ function AdminExperimentsApp({
           <div className="gravity-wallet-state">{report.variants.length} variant{report.variants.length === 1 ? '' : 's'}</div>
         </div>
         {comparison.sampleHint ? <div className="admin-experiment-hint">{comparison.sampleHint}</div> : null}
-        {comparison.leaderVariantId ? <div className="admin-experiment-leader">Current leader: <code>{comparison.leaderVariantId}</code>{comparison.baselineVariantId ? <> · baseline <code>{comparison.baselineVariantId}</code></> : baselineMode === 'none' ? <> · baseline disabled</> : null}</div> : null}
+        <div className="admin-experiment-leader">{comparison.leaderVariantId ? <>Current leader: <code>{comparison.leaderVariantId}</code>{comparison.baselineVariantId ? <> · baseline <code>{comparison.baselineVariantId}</code></> : baselineMode === 'none' ? <> · baseline disabled</> : <> · baseline unavailable</>}</> : <>No current leader yet.</>}<br />{comparison.baselineDescription}</div>
         {!comparison.rows.length ? <div className="admin-empty-card">No experiment events recorded for this window yet.</div> : <div className="holders-table-wrap">
           <table className="holders-table">
             <thead>
@@ -384,6 +409,11 @@ function AdminExperimentsApp({
             <div className="market-card-label">Control vs Previous</div>
             <div className={`wallet-summary-value ${periodSummary.controlDelta != null ? (periodSummary.controlDelta > 0 ? 'admin-delta-pos' : periodSummary.controlDelta < 0 ? 'admin-delta-neg' : '') : ''}`}>{fmtDeltaPct(periodSummary.controlDelta)}</div>
             <p>{periodSummary.previousLabel ? 'Control CTR change vs the previous grouped period.' : 'Need two grouped periods to compare control movement.'}</p>
+          </div>
+          <div className="admin-period-summary-card">
+            <div className="market-card-label">{periodSummary.baselineTitle}</div>
+            <div className="wallet-summary-value">{baselineMode === 'none' ? 'Off' : baselineMode === 'control' ? 'Control' : 'Leader'}</div>
+            <p>{periodSummary.baselineMessage}</p>
           </div>
         </div> : null}
         {!report.trend.length ? <div className="admin-empty-card">No {trendGroupBy} trend rows recorded for this window yet.</div> : <>
