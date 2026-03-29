@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "bun run server.ts",
     "start": "bun run server.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test:wheel": "bun test lib/wheel.test.ts",
     "payout:worker": "bun run scripts/payout-worker.ts",
     "treasury:snapshot": "bun run scripts/treasury-snapshot.ts"
   },
