@@ -249,6 +249,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .admin-claims-shell { display:flex; flex-direction:column; gap:18px; }
 .admin-toolbar-card,.admin-claim-card,.admin-empty-card { background:linear-gradient(180deg, rgba(12,12,26,.94), rgba(8,8,18,.98)); border:1px solid rgba(129,140,248,.18); border-radius:22px; padding:22px; box-shadow:0 18px 60px rgba(0,0,0,.24); }
 .admin-toolbar-grid { display:grid; grid-template-columns:minmax(0, 1.6fr) 220px auto; gap:14px; align-items:end; }
+.admin-experiments-toolbar-grid { grid-template-columns:minmax(0, 1.4fr) 220px auto; }
 .admin-field { display:flex; flex-direction:column; gap:8px; }
 .admin-field label { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--text2); }
 .admin-field input,.admin-field select { width:100%; background:rgba(17,17,40,.82); border:1px solid rgba(129,140,248,.18); color:var(--text); border-radius:12px; padding:14px 16px; font:inherit; }
@@ -273,6 +274,7 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .admin-meta-line p { color:var(--text); }
 .admin-settle-box { display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
 .admin-empty-card { color:var(--text2); }
+.admin-link-btn { display:inline-flex; align-items:center; justify-content:center; text-decoration:none !important; }
 
 /* Stardust & Gravity coloring */
 .stardust-value, .stardust-cell { color: #f59e0b !important; }

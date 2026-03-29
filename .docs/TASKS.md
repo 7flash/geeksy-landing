@@ -61,7 +61,8 @@
 - [x] ~~**Implement A/B testing framework**~~ - ✅ DONE. Added a lightweight experiment layer in `lib/experiments.ts` with query override + cookie/localStorage stickiness, wired hero/nav CTA variants into `app/page.tsx`, and applied client-side variant resolution in `app/page.client.tsx` so landing copy/CTA order can change without restructuring the page.
 - [x] ~~**Add experiment exposure/click analytics**~~ - ✅ DONE. Added first-party experiment analytics with SQLite-backed `experiment_events`, a POST ingestion route at `/api/analytics/experiment`, and client-side exposure/click beacons for the hero/nav experiment CTAs.
 - [x] ~~**Add experiment reporting/export surface**~~ - ✅ DONE. Extended `/api/analytics/experiment` with a GET report/export path that returns variant/CTA summaries as JSON and supports CSV export for spreadsheet analysis.
-- [ ] **Add experiment report UI** - Add a simple internal debug page or operator view that consumes `/api/analytics/experiment` so experiment winners can be inspected in the browser without manual API calls.
+- [x] ~~**Add experiment report UI**~~ - ✅ DONE. Added `/admin/experiments` as a lightweight internal report page with experiment/time-window selectors, summary cards, variant/CTA tables, and CSV export backed by the analytics API.
+- [ ] **Persist experiment UI filters locally** - Remember the last selected experiment id and report window in the browser so operators do not have to reselect them on every visit.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
@@ -69,7 +70,7 @@
 - **Framework**: Melina.js (Bun-native, file-based routing)
 - **Port**: 3400 (configured via BUN_PORT in `.env` for local dev and via process env in production)
 - **Frontend**: Server-rendered landing page with a `page.client.tsx` mount for live market/gravity refresh, Phantom wallet connect, real `/api/wheel/me` summary cards, a treasury reward-tier wheel driven by signed Phantom challenges, and client-resolved hero experiment variants from `lib/experiments.ts`
-- **Experiment analytics**: first-party events post to `/api/analytics/experiment` and persist in SQLite table `experiment_events` inside `gravity.db`; the same route now supports GET JSON summaries and `format=csv` export by `experimentId`
+- **Experiment analytics**: first-party events post to `/api/analytics/experiment` and persist in SQLite table `experiment_events` inside `gravity.db`; the same route now supports GET JSON summaries and `format=csv` export by `experimentId`, and `/admin/experiments` provides a lightweight browser UI on top of that API
 - **Dynamic content**: Live market snapshot renders from Dexscreener via `app/api/market/route.ts`; owner balances come from Helius-backed Solana RPC via `app/api/holders/route.ts`; accumulated gravity leaderboard reads from `gravity.db` via `app/api/leaderboard/route.ts`
 - **Wheel backend**: `lib/wheel.ts` manages spendable gravity, challenge generation, signature verification, wheel spin recording, treasury snapshots, and claim placeholders via `/api/wheel/challenge`, `/api/wheel/spin`, `/api/wheel/me`, and `/api/wheel/spins`
 - **Background scoring**: `scripts/gravity-worker.ts` should run under `bgrun` to update `gravity.db` every minute using the current GKSY USD price and live holder balances
