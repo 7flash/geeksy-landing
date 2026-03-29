@@ -67,7 +67,8 @@
 - [x] ~~**Add experiment trend/history view**~~ - ✅ DONE. The experiment analytics report now includes daily buckets, and `/admin/experiments` renders a daily variant-performance table so operators can spot short-window spikes versus stable trends.
 - [x] ~~**Add experiment chart visualization**~~ - ✅ DONE. `/admin/experiments` now renders a dependency-free SVG trend chart above the daily table so operators can scan variant CTR movement much faster.
 - [x] ~~**Add experiment metric toggle**~~ - ✅ DONE. The experiment trend chart now switches between CTR, exposures, and clicks, persists the chosen metric locally, and lets operators compare both conversion quality and traffic volume over time.
-- [ ] **Add experiment date-group toggle** - Let operators switch the trend/report grouping between daily and weekly windows so longer experiment runs are easier to read.
+- [x] ~~**Add experiment date-group toggle**~~ - ✅ DONE. The experiment report API now supports `groupBy=day|week`, and `/admin/experiments` can switch between daily and weekly trend groupings for longer-running tests.
+- [ ] **Add experiment comparison summary for current grouping** - Show grouping-aware winner/delta summaries (for example current week vs prior week) so operators can interpret weekly mode faster than only scanning the chart/table.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 

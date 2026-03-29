@@ -1,4 +1,4 @@
-import { getExperimentReport, recordExperimentEvent, toExperimentReportCsv } from '../../../../lib/analytics'
+import { getExperimentReport, recordExperimentEvent, toExperimentReportCsv, type ExperimentTrendGroupBy } from '../../../../lib/analytics'
 
 export async function GET(req: Request) {
   try {
@@ -6,13 +6,14 @@ export async function GET(req: Request) {
     const experimentId = (url.searchParams.get('experimentId') || '').trim()
     const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '30', 10) || 30, 1), 365)
     const format = (url.searchParams.get('format') || 'json').trim()
+    const groupBy = ((url.searchParams.get('groupBy') || 'day').trim() === 'week' ? 'week' : 'day') as ExperimentTrendGroupBy
     if (!experimentId) {
       return Response.json({ ok: false, error: 'experimentId is required' }, { status: 400 })
     }
 
     const until = Date.now()
     const since = until - (days * 24 * 60 * 60 * 1000)
-    const report = getExperimentReport(experimentId, { since, until })
+    const report = getExperimentReport(experimentId, { since, until, groupBy })
 
     if (format === 'csv') {
       return new Response(toExperimentReportCsv(report), {

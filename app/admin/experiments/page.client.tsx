@@ -6,10 +6,13 @@ type ExperimentOption = {
   variants: string[]
 }
 
+type TrendGroupBy = 'day' | 'week'
+
 type ExperimentReport = {
   experimentId: string
   since: number
   until: number
+  groupBy: TrendGroupBy
   totals: {
     exposures: number
     clicks: number
@@ -29,9 +32,9 @@ type ExperimentReport = {
     ctaLabel: string | null
     clicks: number
   }>
-  daily: Array<{
-    day: string
-    dayStart: number
+  trend: Array<{
+    label: string
+    periodStart: number
     variantId: string
     exposures: number
     clicks: number
@@ -49,6 +52,7 @@ type TrendMetric = 'ctr' | 'exposures' | 'clicks'
 
 const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
 const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
+const TREND_GROUP_BY_KEY = 'geeksy-admin-experiments:trend-group-by'
 const TREND_METRIC_KEY = 'geeksy-admin-experiments:trend-metric'
 const MIN_COMPARISON_EXPOSURES = 25
 const TREND_SERIES_COLORS = ['#818cf8', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4', '#a78bfa']
@@ -115,29 +119,29 @@ function ReportMetricCard({ label, value, sub }: { label: string; value: string 
   </div>
 }
 
-function TrendChart({ daily, metric, onMetricChange }: { daily: ExperimentReport['daily']; metric: TrendMetric; onMetricChange: (metric: TrendMetric) => void }) {
-  if (!daily.length) return null
+function TrendChart({ trend, metric, onMetricChange }: { trend: ExperimentReport['trend']; metric: TrendMetric; onMetricChange: (metric: TrendMetric) => void }) {
+  if (!trend.length) return null
 
-  const days = Array.from(new Set(daily.map((row) => row.day))).sort()
-  const variants = Array.from(new Set(daily.map((row) => row.variantId))).sort()
+  const labels = Array.from(new Set(trend.map((row) => row.label))).sort()
+  const variants = Array.from(new Set(trend.map((row) => row.variantId))).sort()
   const width = 960
   const height = 280
   const padding = { top: 24, right: 24, bottom: 42, left: 48 }
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
   const metricLabel = metric === 'ctr' ? 'CTR' : metric === 'exposures' ? 'Exposures' : 'Clicks'
-  const readMetric = (row: ExperimentReport['daily'][number] | undefined) => row ? (metric === 'ctr' ? row.ctr : metric === 'exposures' ? row.exposures : row.clicks) : 0
-  const maxValue = Math.max(metric === 'ctr' ? 0.01 : 1, ...daily.map((row) => readMetric(row)))
-  const xStep = days.length > 1 ? plotWidth / (days.length - 1) : 0
+  const readMetric = (row: ExperimentReport['trend'][number] | undefined) => row ? (metric === 'ctr' ? row.ctr : metric === 'exposures' ? row.exposures : row.clicks) : 0
+  const maxValue = Math.max(metric === 'ctr' ? 0.01 : 1, ...trend.map((row) => readMetric(row)))
+  const xStep = labels.length > 1 ? plotWidth / (labels.length - 1) : 0
 
   const colorByVariant = new Map(variants.map((variant, index) => [variant, TREND_SERIES_COLORS[index % TREND_SERIES_COLORS.length]]))
   const pointsByVariant = variants.map((variant) => {
-    const rows = days.map((day, dayIndex) => {
-      const row = daily.find((entry) => entry.variantId === variant && entry.day === day)
+    const rows = labels.map((label, labelIndex) => {
+      const row = trend.find((entry) => entry.variantId === variant && entry.label === label)
       const value = readMetric(row)
-      const x = padding.left + (days.length > 1 ? dayIndex * xStep : plotWidth / 2)
+      const x = padding.left + (labels.length > 1 ? labelIndex * xStep : plotWidth / 2)
       const y = padding.top + plotHeight - (value / maxValue) * plotHeight
-      return { day, value, x, y }
+      return { label, value, x, y }
     })
     const path = rows.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
     return { variant, color: colorByVariant.get(variant) || '#818cf8', rows, path }
@@ -161,15 +165,15 @@ function TrendChart({ daily, metric, onMetricChange }: { daily: ExperimentReport
           <text x={padding.left - 10} y={y + 4} textAnchor="end" className="admin-trend-label">{metric === 'ctr' ? fmtPct(tickValue) : Math.round(tickValue).toString()}</text>
         </g>
       })}
-      {days.map((day, index) => {
-        const x = padding.left + (days.length > 1 ? index * xStep : plotWidth / 2)
-        return <text key={day} x={x} y={height - 14} textAnchor="middle" className="admin-trend-label">{day.slice(5)}</text>
+      {labels.map((label, index) => {
+        const x = padding.left + (labels.length > 1 ? index * xStep : plotWidth / 2)
+        return <text key={label} x={x} y={height - 14} textAnchor="middle" className="admin-trend-label">{label.length > 10 ? label.slice(2) : label.slice(5)}</text>
       })}
       {pointsByVariant.map((series) => <g key={series.variant}>
         <path d={series.path} fill="none" stroke={series.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        {series.rows.map((point) => <g key={`${series.variant}:${point.day}`}>
+        {series.rows.map((point) => <g key={`${series.variant}:${point.label}`}>
           <circle cx={point.x} cy={point.y} r="4.5" fill={series.color} />
-          <title>{`${series.variant} · ${point.day} · ${metric === 'ctr' ? fmtPct(point.value) : point.value}`}</title>
+          <title>{`${series.variant} · ${point.label} · ${metric === 'ctr' ? fmtPct(point.value) : point.value}`}</title>
         </g>)}
       </g>)}
     </svg>
@@ -185,6 +189,8 @@ function AdminExperimentsApp({
   report,
   trendMetric,
   onTrendMetricChange,
+  trendGroupBy,
+  onTrendGroupByChange,
 }: {
   options: ExperimentOption[]
   experimentId: string
@@ -194,6 +200,8 @@ function AdminExperimentsApp({
   report: ExperimentReport | null
   trendMetric: TrendMetric
   onTrendMetricChange: (metric: TrendMetric) => void
+  trendGroupBy: TrendGroupBy
+  onTrendGroupByChange: (groupBy: TrendGroupBy) => void
 }) {
   const comparison = buildVariantComparison(report)
   return <div className="admin-claims-shell">
@@ -214,9 +222,16 @@ function AdminExperimentsApp({
             <option value="90">Last 90 days</option>
           </select>
         </div>
+        <div className="admin-field admin-field-status">
+          <label htmlFor="admin-experiment-group-by">Group</label>
+          <select id="admin-experiment-group-by" value={trendGroupBy}>
+            <option value="day">Daily</option>
+            <option value="week">Weekly</option>
+          </select>
+        </div>
         <div className="admin-toolbar-actions">
           <button className="btn-primary" id="admin-experiment-load-btn">{loading ? 'Loading…' : 'Load Report'}</button>
-          <a className="wheel-secondary-btn admin-link-btn" id="admin-experiment-export-btn" href={`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}&format=csv`}>Download CSV</a>
+          <a className="wheel-secondary-btn admin-link-btn" id="admin-experiment-export-btn" href={`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}&groupBy=${encodeURIComponent(trendGroupBy)}&format=csv`}>Download CSV</a>
         </div>
       </div>
       <p className="admin-toolbar-help">Uses the first-party experiment analytics API. CSV export is suitable for spreadsheet review and operator snapshots.</p>
@@ -279,20 +294,20 @@ function AdminExperimentsApp({
         <div className="admin-queue-header">
           <div>
             <div className="market-card-label">Trend history</div>
-            <h3>Daily variant performance</h3>
+            <h3>{trendGroupBy === 'week' ? 'Weekly' : 'Daily'} variant performance</h3>
           </div>
-          <div className="gravity-wallet-state">{report.daily.length} day-row{report.daily.length === 1 ? '' : 's'}</div>
+          <div className="gravity-wallet-state">{report.trend.length} {trendGroupBy === 'week' ? 'week' : 'period'}-row{report.trend.length === 1 ? '' : 's'}</div>
         </div>
-        {!report.daily.length ? <div className="admin-empty-card">No daily trend rows recorded for this window yet.</div> : <>
-          <TrendChart daily={report.daily} metric={trendMetric} onMetricChange={onTrendMetricChange} />
+        {!report.trend.length ? <div className="admin-empty-card">No {trendGroupBy} trend rows recorded for this window yet.</div> : <>
+          <TrendChart trend={report.trend} metric={trendMetric} onMetricChange={onTrendMetricChange} />
           <div className="holders-table-wrap">
             <table className="holders-table">
               <thead>
                 <tr><th>Day</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
               </thead>
               <tbody>
-                {report.daily.map((row, index) => <tr key={`${row.day}:${row.variantId}:${index}`}>
-                  <td><code>{row.day}</code></td>
+                {report.trend.map((row, index) => <tr key={`${row.label}:${row.variantId}:${index}`}>
+                  <td><code>{row.label}</code></td>
                   <td><code>{row.variantId}</code></td>
                   <td>{row.exposures}</td>
                   <td>{row.clicks}</td>
@@ -339,8 +354,10 @@ export default function mount() {
   const options = readInitialJson<ExperimentOption[]>('admin-experiment-options') || []
   const storedExperimentId = readStorage(EXPERIMENT_ID_KEY)
   const storedDays = readStorage(EXPERIMENT_DAYS_KEY)
+  const storedGroupBy = readStorage(TREND_GROUP_BY_KEY)
   let experimentId = options.some((option) => option.id === storedExperimentId) ? storedExperimentId! : (options[0]?.id || 'hero-cta-v1')
   let days = ['7', '14', '30', '90'].includes(storedDays || '') ? storedDays! : '30'
+  let trendGroupBy: TrendGroupBy = (storedGroupBy === 'week' ? 'week' : 'day')
   let trendMetric: TrendMetric = ['ctr', 'exposures', 'clicks'].includes(readStorage(TREND_METRIC_KEY) || '')
     ? readStorage(TREND_METRIC_KEY)! as TrendMetric
     : 'ctr'
@@ -353,6 +370,10 @@ export default function mount() {
       trendMetric = metric
       writeStorage(TREND_METRIC_KEY, trendMetric)
       renderAll()
+    }} trendGroupBy={trendGroupBy} onTrendGroupByChange={(groupBy) => {
+      trendGroupBy = groupBy
+      writeStorage(TREND_GROUP_BY_KEY, trendGroupBy)
+      void loadReport()
     }} />, root)
 
     const experimentSelect = document.getElementById('admin-experiment-id') as HTMLSelectElement | null
@@ -369,6 +390,13 @@ export default function mount() {
       renderAll()
     }
 
+    const groupBySelect = document.getElementById('admin-experiment-group-by') as HTMLSelectElement | null
+    if (groupBySelect) groupBySelect.onchange = () => {
+      trendGroupBy = groupBySelect.value === 'week' ? 'week' : 'day'
+      writeStorage(TREND_GROUP_BY_KEY, trendGroupBy)
+      void loadReport()
+    }
+
     const loadBtn = document.getElementById('admin-experiment-load-btn') as HTMLButtonElement | null
     if (loadBtn) loadBtn.onclick = () => { void loadReport() }
   }
@@ -378,7 +406,7 @@ export default function mount() {
     error = null
     renderAll()
     try {
-      const res = await fetch(`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}`)
+      const res = await fetch(`/api/analytics/experiment?experimentId=${encodeURIComponent(experimentId)}&days=${encodeURIComponent(days)}&groupBy=${encodeURIComponent(trendGroupBy)}`)
       const json = await res.json() as ReportResponse
       if (!res.ok || !json.ok || !json.report) throw new Error(json.error || 'Failed to load experiment report')
       report = json.report

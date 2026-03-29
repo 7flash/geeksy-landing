@@ -30,9 +30,11 @@ export type ExperimentCtaReportRow = {
   clicks: number
 }
 
-export type ExperimentDailyReportRow = {
-  day: string
-  dayStart: number
+export type ExperimentTrendGroupBy = 'day' | 'week'
+
+export type ExperimentTrendReportRow = {
+  label: string
+  periodStart: number
   variantId: string
   exposures: number
   clicks: number
@@ -43,6 +45,7 @@ export type ExperimentReport = {
   experimentId: string
   since: number
   until: number
+  groupBy: ExperimentTrendGroupBy
   totals: {
     exposures: number
     clicks: number
@@ -51,7 +54,7 @@ export type ExperimentReport = {
   }
   variants: ExperimentVariantReportRow[]
   ctas: ExperimentCtaReportRow[]
-  daily: ExperimentDailyReportRow[]
+  trend: ExperimentTrendReportRow[]
 }
 
 export function recordExperimentEvent(input: ExperimentEventInput) {
@@ -82,7 +85,7 @@ export function recordExperimentEvent(input: ExperimentEventInput) {
   return { id, createdAt }
 }
 
-export function getExperimentReport(experimentId: string, { since = 0, until = Date.now() }: { since?: number; until?: number } = {}): ExperimentReport {
+export function getExperimentReport(experimentId: string, { since = 0, until = Date.now(), groupBy = 'day' }: { since?: number; until?: number; groupBy?: ExperimentTrendGroupBy } = {}): ExperimentReport {
   const totals = db.query(`
     SELECT
       COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
@@ -125,20 +128,35 @@ export function getExperimentReport(experimentId: string, { since = 0, until = D
     ORDER BY clicks DESC, variant_id ASC, cta_id ASC
   `).all(experimentId, since, until) as ExperimentCtaReportRow[]
 
-  const daily = db.query(`
-    SELECT
-      strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') as day,
-      (CAST(strftime('%s', strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') || ' 00:00:00') AS INTEGER) * 1000) as dayStart,
-      variant_id as variantId,
-      COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
-      COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks
-    FROM experiment_events
-    WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
-    GROUP BY day, dayStart, variant_id
-    ORDER BY dayStart DESC, variant_id ASC
-  `).all(experimentId, since, until) as Array<{
-    day: string
-    dayStart: number
+  const trendSql = groupBy === 'week'
+    ? `
+      SELECT
+        (strftime('%Y', created_at / 1000, 'unixepoch') || '-W' || printf('%02d', CAST(strftime('%W', created_at / 1000, 'unixepoch') AS INTEGER))) as label,
+        (CAST(strftime('%s', date(created_at / 1000, 'unixepoch', 'weekday 1', '-7 days')) AS INTEGER) * 1000) as periodStart,
+        variant_id as variantId,
+        COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
+        COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks
+      FROM experiment_events
+      WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
+      GROUP BY label, periodStart, variant_id
+      ORDER BY periodStart DESC, variant_id ASC
+    `
+    : `
+      SELECT
+        strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') as label,
+        (CAST(strftime('%s', strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') || ' 00:00:00') AS INTEGER) * 1000) as periodStart,
+        variant_id as variantId,
+        COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
+        COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks
+      FROM experiment_events
+      WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
+      GROUP BY label, periodStart, variant_id
+      ORDER BY periodStart DESC, variant_id ASC
+    `
+
+  const trend = db.query(trendSql).all(experimentId, since, until) as Array<{
+    label: string
+    periodStart: number
     variantId: string
     exposures: number
     clicks: number
@@ -151,6 +169,7 @@ export function getExperimentReport(experimentId: string, { since = 0, until = D
     experimentId,
     since,
     until,
+    groupBy,
     totals: {
       exposures: totalExposures,
       clicks: totalClicks,
@@ -165,9 +184,9 @@ export function getExperimentReport(experimentId: string, { since = 0, until = D
       ctr: Number(row.exposures || 0) > 0 ? Number(row.clicks || 0) / Number(row.exposures || 0) : 0,
     })),
     ctas,
-    daily: daily.map((row) => ({
-      day: row.day,
-      dayStart: Number(row.dayStart || 0),
+    trend: trend.map((row) => ({
+      label: row.label,
+      periodStart: Number(row.periodStart || 0),
       variantId: row.variantId,
       exposures: Number(row.exposures || 0),
       clicks: Number(row.clicks || 0),
@@ -182,7 +201,7 @@ export function toExperimentReportCsv(report: ExperimentReport) {
     `totals,${report.experimentId},,,,${report.totals.exposures},${report.totals.clicks},${report.totals.uniqueVisitors},${report.totals.ctr},${report.since},${report.until}`,
     ...report.variants.map((row) => `variant,${report.experimentId},${row.variantId},,,${row.exposures},${row.clicks},${row.uniqueVisitors},${row.ctr},${report.since},${report.until}`),
     ...report.ctas.map((row) => `cta,${report.experimentId},${row.variantId},${row.ctaId || ''},${escapeCsv(row.ctaLabel || '')},,${row.clicks},,,${report.since},${report.until}`),
-    ...report.daily.map((row) => `daily,${report.experimentId},${row.variantId},${row.day},,${row.exposures},${row.clicks},,${row.ctr},${row.dayStart},${row.dayStart}`),
+    ...report.trend.map((row) => `trend:${report.groupBy},${report.experimentId},${row.variantId},${row.label},,${row.exposures},${row.clicks},,${row.ctr},${row.periodStart},${row.periodStart}`),
   ]
   return lines.join('\n')
 }
