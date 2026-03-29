@@ -1,5 +1,6 @@
-import { db } from '../../../lib/db'
-import { fetchMarketSnapshot, getWalletDisplay, getWalletLabel } from '../../../lib/gksy'
+import { db, estimateTokenPriceUsd } from '../../../lib/db'
+import { getWalletDisplay, getWalletLabel } from '../../../lib/gksy'
+import { getMarketSnapshotWithFallback } from '../../../lib/market-cache'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -65,10 +66,10 @@ export async function GET(req: Request) {
     WHERE COALESCE(g.points, 0) - COALESCE(l.total_spent, 0) > 0
   `).get() as { total: number }
 
-  let priceUsd = 0
+  let priceUsd = estimateTokenPriceUsd()
   try {
-    const market = await fetchMarketSnapshot()
-    priceUsd = market.pair.priceUsd
+    const { payload } = await getMarketSnapshotWithFallback({ allowStale: true })
+    if (payload.pair?.priceUsd) priceUsd = payload.pair.priceUsd
   } catch {}
 
   return Response.json({

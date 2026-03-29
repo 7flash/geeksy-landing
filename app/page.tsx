@@ -1,6 +1,7 @@
 import { Head } from 'melina/server'
-import { db, estimateTokenPriceUsd, readLatestMarketSnapshot } from '../lib/db'
+import { db, estimateTokenPriceUsd } from '../lib/db'
 import { getWalletDisplay, getWalletLabel } from '../lib/gksy'
+import { getMarketSnapshotWithFallback } from '../lib/market-cache'
 
 type MarketSnapshot = {
   ok: boolean
@@ -83,12 +84,16 @@ function fmtSol(n: number) {
   return `${n.toFixed(8)} SOL`
 }
 
-function getLatestMarketSnapshot(): MarketSnapshot | null {
-  return readLatestMarketSnapshot<MarketSnapshot>()?.payload || null
+async function getMarketSnapshotForPage(): Promise<MarketSnapshot | null> {
+  try {
+    const { payload } = await getMarketSnapshotWithFallback({ allowStale: true })
+    return payload
+  } catch {
+    return null
+  }
 }
 
-function getGravitySnapshot(limit = 30): GravitySnapshot {
-  const market = getLatestMarketSnapshot()
+function getGravitySnapshot(limit = 30, market: MarketSnapshot | null = null): GravitySnapshot {
   const priceUsd = market?.pair?.priceUsd || estimateTokenPriceUsd()
 
   // Ensure stardust column
@@ -188,9 +193,9 @@ function GravityFallback({ data }: { data: GravitySnapshot }) {
   </div>
 }
 
-export default function LandingPage() {
-  const marketSnapshot = getLatestMarketSnapshot()
-  const gravitySnapshot = getGravitySnapshot(30)
+export default async function LandingPage() {
+  const marketSnapshot = await getMarketSnapshotForPage()
+  const gravitySnapshot = getGravitySnapshot(30, marketSnapshot)
   return (
     <>
       <Head>
