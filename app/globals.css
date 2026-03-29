@@ -286,6 +286,14 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .admin-experiment-row-control td { background:rgba(99,102,241,.05); }
 .admin-delta-pos { color:#86efac !important; font-weight:700; }
 .admin-delta-neg { color:#fca5a5 !important; font-weight:700; }
+.admin-trend-chart-shell { margin:14px 0 18px; padding:16px; border-radius:18px; border:1px solid rgba(129,140,248,.16); background:rgba(17,17,40,.6); }
+.admin-trend-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+.admin-trend-legend-item { display:inline-flex; align-items:center; gap:8px; color:var(--text2); font-size:12px; }
+.admin-trend-legend-dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
+.admin-trend-chart { width:100%; height:auto; display:block; }
+.admin-trend-axis { stroke:rgba(255,255,255,.18); stroke-width:1; }
+.admin-trend-grid { stroke:rgba(255,255,255,.07); stroke-width:1; }
+.admin-trend-label { fill:#9ca3af; font-size:11px; font-family:var(--mono); }
 
 /* Stardust & Gravity coloring */
 .stardust-value, .stardust-cell { color: #f59e0b !important; }

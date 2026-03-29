@@ -48,6 +48,7 @@ type ReportResponse = {
 const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
 const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
 const MIN_COMPARISON_EXPOSURES = 25
+const TREND_SERIES_COLORS = ['#818cf8', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4', '#a78bfa']
 
 function readInitialJson<T>(id: string): T | null {
   const node = document.getElementById(id)
@@ -108,6 +109,58 @@ function ReportMetricCard({ label, value, sub }: { label: string; value: string 
     <div className="market-card-label">{label}</div>
     <div className="wallet-summary-value">{value}</div>
     <p>{sub}</p>
+  </div>
+}
+
+function TrendChart({ daily }: { daily: ExperimentReport['daily'] }) {
+  if (!daily.length) return null
+
+  const days = Array.from(new Set(daily.map((row) => row.day))).sort()
+  const variants = Array.from(new Set(daily.map((row) => row.variantId))).sort()
+  const width = 960
+  const height = 280
+  const padding = { top: 24, right: 24, bottom: 42, left: 48 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const maxCtr = Math.max(0.01, ...daily.map((row) => row.ctr))
+  const xStep = days.length > 1 ? plotWidth / (days.length - 1) : 0
+
+  const colorByVariant = new Map(variants.map((variant, index) => [variant, TREND_SERIES_COLORS[index % TREND_SERIES_COLORS.length]]))
+  const pointsByVariant = variants.map((variant) => {
+    const rows = days.map((day, dayIndex) => {
+      const row = daily.find((entry) => entry.variantId === variant && entry.day === day)
+      const x = padding.left + (days.length > 1 ? dayIndex * xStep : plotWidth / 2)
+      const y = padding.top + plotHeight - ((row?.ctr || 0) / maxCtr) * plotHeight
+      return { day, ctr: row?.ctr || 0, x, y }
+    })
+    const path = rows.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ')
+    return { variant, color: colorByVariant.get(variant) || '#818cf8', rows, path }
+  })
+
+  return <div className="admin-trend-chart-shell">
+    <div className="admin-trend-legend">{pointsByVariant.map((series) => <div className="admin-trend-legend-item" key={series.variant}><span className="admin-trend-legend-dot" style={{ background: series.color }} /><code>{series.variant}</code></div>)}</div>
+    <svg viewBox={`0 0 ${width} ${height}`} className="admin-trend-chart" role="img" aria-label="Daily experiment CTR trend chart">
+      <line x1={padding.left} y1={padding.top + plotHeight} x2={padding.left + plotWidth} y2={padding.top + plotHeight} className="admin-trend-axis" />
+      <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotHeight} className="admin-trend-axis" />
+      {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
+        const y = padding.top + plotHeight - tick * plotHeight
+        return <g key={tick}>
+          <line x1={padding.left} y1={y} x2={padding.left + plotWidth} y2={y} className="admin-trend-grid" />
+          <text x={padding.left - 10} y={y + 4} textAnchor="end" className="admin-trend-label">{fmtPct(maxCtr * tick)}</text>
+        </g>
+      })}
+      {days.map((day, index) => {
+        const x = padding.left + (days.length > 1 ? index * xStep : plotWidth / 2)
+        return <text key={day} x={x} y={height - 14} textAnchor="middle" className="admin-trend-label">{day.slice(5)}</text>
+      })}
+      {pointsByVariant.map((series) => <g key={series.variant}>
+        <path d={series.path} fill="none" stroke={series.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {series.rows.map((point) => <g key={`${series.variant}:${point.day}`}>
+          <circle cx={point.x} cy={point.y} r="4.5" fill={series.color} />
+          <title>{`${series.variant} · ${point.day} · ${fmtPct(point.ctr)}`}</title>
+        </g>)}
+      </g>)}
+    </svg>
   </div>
 }
 
@@ -214,22 +267,25 @@ function AdminExperimentsApp({
           </div>
           <div className="gravity-wallet-state">{report.daily.length} day-row{report.daily.length === 1 ? '' : 's'}</div>
         </div>
-        {!report.daily.length ? <div className="admin-empty-card">No daily trend rows recorded for this window yet.</div> : <div className="holders-table-wrap">
-          <table className="holders-table">
-            <thead>
-              <tr><th>Day</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
-            </thead>
-            <tbody>
-              {report.daily.map((row, index) => <tr key={`${row.day}:${row.variantId}:${index}`}>
-                <td><code>{row.day}</code></td>
-                <td><code>{row.variantId}</code></td>
-                <td>{row.exposures}</td>
-                <td>{row.clicks}</td>
-                <td>{fmtPct(row.ctr)}</td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>}
+        {!report.daily.length ? <div className="admin-empty-card">No daily trend rows recorded for this window yet.</div> : <>
+          <TrendChart daily={report.daily} />
+          <div className="holders-table-wrap">
+            <table className="holders-table">
+              <thead>
+                <tr><th>Day</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
+              </thead>
+              <tbody>
+                {report.daily.map((row, index) => <tr key={`${row.day}:${row.variantId}:${index}`}>
+                  <td><code>{row.day}</code></td>
+                  <td><code>{row.variantId}</code></td>
+                  <td>{row.exposures}</td>
+                  <td>{row.clicks}</td>
+                  <td>{fmtPct(row.ctr)}</td>
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+        </>}
       </div>
 
       <div className="admin-toolbar-card">

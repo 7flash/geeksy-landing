@@ -65,7 +65,8 @@
 - [x] ~~**Persist experiment UI filters locally**~~ - ✅ DONE. `/admin/experiments` now restores and persists the selected experiment id and time window from browser `localStorage` so repeated operator review is faster.
 - [x] ~~**Add experiment comparison helpers**~~ - ✅ DONE. `/admin/experiments` now highlights the current leader, shows CTR deltas vs control, and surfaces low-sample warnings so operators can interpret experiment results faster without raw-table-only analysis.
 - [x] ~~**Add experiment trend/history view**~~ - ✅ DONE. The experiment analytics report now includes daily buckets, and `/admin/experiments` renders a daily variant-performance table so operators can spot short-window spikes versus stable trends.
-- [ ] **Add experiment chart visualization** - Add a simple line/bar chart for the daily trend data so operators can scan variant movement faster than reading the daily table alone.
+- [x] ~~**Add experiment chart visualization**~~ - ✅ DONE. `/admin/experiments` now renders a dependency-free SVG trend chart above the daily table so operators can scan variant CTR movement much faster.
+- [ ] **Add experiment metric toggle** - Let operators switch the trend chart between CTR, exposures, and clicks so they can compare both conversion quality and traffic volume over time.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
