@@ -2,6 +2,18 @@
 
 This is the fastest safe path to push the latest landing changes to production and then verify the live Phantom wheel flow.
 
+For the repeatable scripted path, use:
+
+```bash
+bash scripts/prod-rollout.sh
+```
+
+Optional host override:
+
+```bash
+bash scripts/prod-rollout.sh root@202.155.132.139
+```
+
 ## Production target
 
 - Server: `202.155.132.139`
@@ -11,6 +23,8 @@ This is the fastest safe path to push the latest landing changes to production a
 - Reverse proxy: Caddy → port `3400`
 
 ## 1. Upgrade the server to the fixed `bgrun` release first
+
+The manual steps below are what `scripts/prod-rollout.sh` automates.
 
 `bgrun@3.12.12` had a packaging bug: the published tarball missed `dashboard/lib/runtime.ts`.
 Upgrade production installs to `3.12.13` or newer before restarting anything.
