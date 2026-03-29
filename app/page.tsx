@@ -24,6 +24,9 @@ type MarketSnapshot = {
     changeH24: number
   }
   capturedAt?: number
+  source?: 'live' | 'cache' | 'stale-cache'
+  stale?: boolean
+  error?: string
 }
 
 type GravitySnapshot = {
@@ -166,17 +169,28 @@ function getGravitySnapshot(limit = 30, market: MarketSnapshot | null = null): G
   }
 }
 
+function MarketStatusHint({ data }: { data: MarketSnapshot }) {
+  if (!data.stale && data.source !== 'cache') return null
+  const captured = data.capturedAt ? new Date(data.capturedAt).toLocaleString() : null
+  return <div className="market-status-note" role="status">
+    <strong>{data.stale ? 'Cached market snapshot' : 'Warm market cache'}</strong>
+    <span>{data.stale
+      ? `Dexscreener refresh failed, so this section is showing the last cached snapshot${captured ? ` from ${captured}` : ''}.`
+      : `Serving the latest cached market snapshot${captured ? ` from ${captured}` : ''} while fresh data warms.`}</span>
+  </div>
+}
+
 function MarketFallback({ data }: { data: MarketSnapshot | null }) {
   if (!data?.ok || !data.pair || !data.token) return <div className="market-loading">Market snapshot will appear after the first live refresh.</div>
   const p = data.pair
-  return <div className="market-grid">
+  return <><MarketStatusHint data={data} /><div className="market-grid">
     <div className="market-card market-card-primary"><div className="market-card-label">Token</div><div className="market-token-row"><div><h3>{data.token.name} ({data.token.symbol})</h3><p className="market-muted">{data.token.address}</p></div><a href={p.url} target="_blank" rel="noopener" className="btn-primary">View on Dexscreener</a></div></div>
     <div className="market-card"><div className="market-card-label">Price</div><div className="market-big">{fmtUsd(p.priceUsd)}</div><div className={`market-change ${p.changeH24 >= 0 ? 'pos' : 'neg'}`}>24h {fmtPct(p.changeH24)}</div></div>
     <div className="market-card"><div className="market-card-label">Liquidity</div><div className="market-big">{fmtUsd(p.liquidityUsd)}</div><div className="market-muted">DEX: {p.dexId}</div></div>
     <div className="market-card"><div className="market-card-label">FDV</div><div className="market-big">{fmtUsd(p.fdv)}</div><div className="market-muted">Market cap {fmtUsd(p.marketCap)}</div></div>
     <div className="market-card"><div className="market-card-label">24h Volume</div><div className="market-big">{fmtUsd(p.volume24h)}</div><div className="market-muted">Buys {p.buys24h} · Sells {p.sells24h}</div></div>
     <div className="market-card"><div className="market-card-label">Momentum</div><div className="market-mini-grid"><span className={p.changeM5 >= 0 ? 'pos' : 'neg'}>5m {fmtPct(p.changeM5)}</span><span className={p.changeH1 >= 0 ? 'pos' : 'neg'}>1h {fmtPct(p.changeH1)}</span><span className={p.changeH6 >= 0 ? 'pos' : 'neg'}>6h {fmtPct(p.changeH6)}</span><span className={p.changeH24 >= 0 ? 'pos' : 'neg'}>24h {fmtPct(p.changeH24)}</span></div></div>
-  </div>
+  </div></>
 }
 
 function GravityFallback({ data }: { data: GravitySnapshot }) {

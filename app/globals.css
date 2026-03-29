@@ -125,6 +125,9 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .features { gap:24px; margin-top:48px; }
 .problem-card,.feature,.compare-card,.start-card,.vision-diagram,.waterfall-stage,.market-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:28px; transition:border-color .2s; }
 .problem-card:hover,.feature:hover,.compare-card:hover,.start-card:hover,.waterfall-stage:hover,.market-card:hover { border-color:var(--accent); }
+.market-status-note { display:flex; flex-direction:column; gap:6px; margin-bottom:14px; padding:14px 16px; border-radius:14px; border:1px solid rgba(245,158,11,.28); background:linear-gradient(135deg, rgba(245,158,11,.12), rgba(99,102,241,.08)); color:#fde68a; }
+.market-status-note strong { font-size:13px; letter-spacing:.04em; text-transform:uppercase; }
+.market-status-note span { color:#f5f3c7; font-size:13px; line-height:1.6; }
 .problem-icon,.feature-icon { font-size:28px; margin-bottom:12px; }
 .problem-card h3,.feature h3,.compare-card h3,.start-card h3 { font-size:18px; font-weight:700; margin-bottom:8px; color:var(--text); }
 .problem-card p,.feature p,.compare-card p,.start-card p { font-size:14px; color:var(--text2); line-height:1.6; }
