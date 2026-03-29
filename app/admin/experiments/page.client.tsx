@@ -193,7 +193,7 @@ function buildPeriodSummary(report: ExperimentReport | null, baselineMode: Basel
   }
 }
 
-function TrendChart({ trend, metric, onMetricChange }: { trend: ExperimentReport['trend']; metric: TrendMetric; onMetricChange: (metric: TrendMetric) => void }) {
+function TrendChart({ trend, metric, groupBy, onMetricChange }: { trend: ExperimentReport['trend']; metric: TrendMetric; groupBy: TrendGroupBy; onMetricChange: (metric: TrendMetric) => void }) {
   if (!trend.length) return null
 
   const labels = Array.from(new Set(trend.map((row) => row.label))).sort()
@@ -228,7 +228,7 @@ function TrendChart({ trend, metric, onMetricChange }: { trend: ExperimentReport
         {(['ctr', 'exposures', 'clicks'] as TrendMetric[]).map((entry) => <button key={entry} type="button" className={`admin-trend-toggle ${metric === entry ? 'admin-trend-toggle-active' : ''}`} onClick={() => onMetricChange(entry)}>{entry === 'ctr' ? 'CTR' : entry[0]!.toUpperCase() + entry.slice(1)}</button>)}
       </div>
     </div>
-    <svg viewBox={`0 0 ${width} ${height}`} className="admin-trend-chart" role="img" aria-label={`Daily experiment ${metricLabel} trend chart`}>
+    <svg viewBox={`0 0 ${width} ${height}`} className="admin-trend-chart" role="img" aria-label={`${groupBy === 'week' ? 'Weekly' : 'Daily'} experiment ${metricLabel} trend chart`}>
       <line x1={padding.left} y1={padding.top + plotHeight} x2={padding.left + plotWidth} y2={padding.top + plotHeight} className="admin-trend-axis" />
       <line x1={padding.left} y1={padding.top} x2={padding.left} y2={padding.top + plotHeight} className="admin-trend-axis" />
       {[0, 0.25, 0.5, 0.75, 1].map((tick) => {
@@ -241,7 +241,7 @@ function TrendChart({ trend, metric, onMetricChange }: { trend: ExperimentReport
       })}
       {labels.map((label, index) => {
         const x = padding.left + (labels.length > 1 ? index * xStep : plotWidth / 2)
-        return <text key={label} x={x} y={height - 14} textAnchor="middle" className="admin-trend-label">{label.length > 10 ? label.slice(2) : label.slice(5)}</text>
+        return <text key={label} x={x} y={height - 14} textAnchor="middle" className="admin-trend-label">{fmtTrendLabel(label, groupBy)}</text>
       })}
       {pointsByVariant.map((series) => <g key={series.variant}>
         <path d={series.path} fill="none" stroke={series.color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
@@ -424,7 +424,7 @@ function AdminExperimentsApp({
           </div>
         </div> : null}
         {!report.trend.length ? <div className="admin-empty-card">No {trendGroupBy} trend rows recorded for this window yet.</div> : <>
-          <TrendChart trend={report.trend} metric={trendMetric} onMetricChange={onTrendMetricChange} />
+          <TrendChart trend={report.trend} metric={trendMetric} groupBy={trendGroupBy} onMetricChange={onTrendMetricChange} />
           <div className="holders-table-wrap">
             <table className="holders-table">
               <thead>
