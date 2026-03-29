@@ -37,11 +37,22 @@ type ReportResponse = {
   error?: string
 }
 
+const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
+const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
+
 function readInitialJson<T>(id: string): T | null {
   const node = document.getElementById(id)
   const text = node?.textContent?.trim()
   if (!text || text === 'null') return null
   try { return JSON.parse(text) as T } catch { return null }
+}
+
+function readStorage(key: string) {
+  try { return window.localStorage.getItem(key) } catch { return null }
+}
+
+function writeStorage(key: string, value: string) {
+  try { window.localStorage.setItem(key, value) } catch {}
 }
 
 function fmtPct(n: number) {
@@ -177,8 +188,10 @@ export default function mount() {
   if (!root) return
 
   const options = readInitialJson<ExperimentOption[]>('admin-experiment-options') || []
-  let experimentId = options[0]?.id || 'hero-cta-v1'
-  let days = '30'
+  const storedExperimentId = readStorage(EXPERIMENT_ID_KEY)
+  const storedDays = readStorage(EXPERIMENT_DAYS_KEY)
+  let experimentId = options.some((option) => option.id === storedExperimentId) ? storedExperimentId! : (options[0]?.id || 'hero-cta-v1')
+  let days = ['7', '14', '30', '90'].includes(storedDays || '') ? storedDays! : '30'
   let loading = false
   let error: string | null = null
   let report: ExperimentReport | null = null
@@ -189,12 +202,14 @@ export default function mount() {
     const experimentSelect = document.getElementById('admin-experiment-id') as HTMLSelectElement | null
     if (experimentSelect) experimentSelect.onchange = () => {
       experimentId = experimentSelect.value
+      writeStorage(EXPERIMENT_ID_KEY, experimentId)
       renderAll()
     }
 
     const daysSelect = document.getElementById('admin-experiment-days') as HTMLSelectElement | null
     if (daysSelect) daysSelect.onchange = () => {
       days = daysSelect.value
+      writeStorage(EXPERIMENT_DAYS_KEY, days)
       renderAll()
     }
 

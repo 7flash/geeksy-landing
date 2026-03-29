@@ -62,7 +62,8 @@
 - [x] ~~**Add experiment exposure/click analytics**~~ - ✅ DONE. Added first-party experiment analytics with SQLite-backed `experiment_events`, a POST ingestion route at `/api/analytics/experiment`, and client-side exposure/click beacons for the hero/nav experiment CTAs.
 - [x] ~~**Add experiment reporting/export surface**~~ - ✅ DONE. Extended `/api/analytics/experiment` with a GET report/export path that returns variant/CTA summaries as JSON and supports CSV export for spreadsheet analysis.
 - [x] ~~**Add experiment report UI**~~ - ✅ DONE. Added `/admin/experiments` as a lightweight internal report page with experiment/time-window selectors, summary cards, variant/CTA tables, and CSV export backed by the analytics API.
-- [ ] **Persist experiment UI filters locally** - Remember the last selected experiment id and report window in the browser so operators do not have to reselect them on every visit.
+- [x] ~~**Persist experiment UI filters locally**~~ - ✅ DONE. `/admin/experiments` now restores and persists the selected experiment id and time window from browser `localStorage` so repeated operator review is faster.
+- [ ] **Add experiment comparison helpers** - Add quick deltas, winner highlighting, or minimum-sample hints to the experiment report UI so operators can interpret results faster than raw CTR tables alone.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
