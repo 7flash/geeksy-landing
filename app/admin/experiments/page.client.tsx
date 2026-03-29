@@ -91,6 +91,13 @@ function fmtDateRange(from: number, to: number) {
   return `${new Date(from).toLocaleString()} → ${new Date(to).toLocaleString()}`
 }
 
+function fmtTrendLabel(label: string, groupBy: TrendGroupBy) {
+  if (groupBy !== 'week') return label
+  const match = label.match(/^(\d{4})-W(\d{2})$/)
+  if (!match) return label
+  return `W${match[2]} '${match[1].slice(2)}`
+}
+
 function buildVariantComparison(report: ExperimentReport | null, sampleThreshold: number, baselineMode: BaselineMode) {
   if (!report) return { rows: [], baselineVariantId: null as string | null, baselineLabel: 'No baseline', baselineDescription: 'Load a report to inspect baseline comparisons.', controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
 
@@ -392,8 +399,8 @@ function AdminExperimentsApp({
         {periodSummary.currentLabel ? <div className="admin-period-summary-grid">
           <div className="admin-period-summary-card">
             <div className="market-card-label">Current {trendGroupBy === 'week' ? 'Week' : 'Period'}</div>
-            <div className="wallet-summary-value"><code>{periodSummary.currentLabel}</code></div>
-            <p>{periodSummary.previousLabel ? `Comparing against ${periodSummary.previousLabel}.` : 'No previous period available yet.'}</p>
+            <div className="wallet-summary-value"><code>{fmtTrendLabel(periodSummary.currentLabel, trendGroupBy)}</code></div>
+            <p>{periodSummary.previousLabel ? `Comparing against ${fmtTrendLabel(periodSummary.previousLabel, trendGroupBy)}.` : 'No previous period available yet.'}</p>
           </div>
           <div className="admin-period-summary-card">
             <div className="market-card-label">Current Leader</div>
@@ -421,11 +428,11 @@ function AdminExperimentsApp({
           <div className="holders-table-wrap">
             <table className="holders-table">
               <thead>
-                <tr><th>Day</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
+                <tr><th>{trendGroupBy === 'week' ? 'Week' : 'Day'}</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
               </thead>
               <tbody>
                 {report.trend.map((row, index) => <tr key={`${row.label}:${row.variantId}:${index}`}>
-                  <td><code>{row.label}</code></td>
+                  <td><code>{fmtTrendLabel(row.label, trendGroupBy)}</code></td>
                   <td><code>{row.variantId}</code></td>
                   <td>{row.exposures}</td>
                   <td>{row.clicks}</td>

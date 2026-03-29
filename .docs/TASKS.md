@@ -73,7 +73,8 @@
 - [x] ~~**Add experiment control baseline toggle**~~ - ✅ DONE. `/admin/experiments` now lets operators choose `control`, `current leader`, or `none` as the comparison baseline for UI delta interpretation, with the choice persisted locally.
 - [x] ~~**Add experiment baseline messaging polish**~~ - ✅ DONE. `/admin/experiments` now explicitly distinguishes baseline disabled, baseline unavailable, and active-baseline states in both the variant summary text and grouped period summary cards.
 - [x] ~~**Add experiment summary layout polish**~~ - ✅ DONE. The grouped summary now uses a responsive auto-fit grid, keeps cards equal-height, and lets the baseline-state card span wider space on larger screens while collapsing cleanly on narrower widths.
-- [ ] **Add experiment trend table labeling polish** - Rename the grouped trend table header from `Day` to a grouping-aware label and tighten period labels for weekly mode.
+- [x] ~~**Add experiment trend table labeling polish**~~ - ✅ DONE. `/admin/experiments` now uses a grouping-aware trend column label and short weekly labels like `W13 '26` for faster scanning.
+- [ ] **Add experiment trend chart label polish** - Make the SVG chart x-axis labels match the same tightened weekly formatting and reduce ambiguity in mixed-length label windows.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
