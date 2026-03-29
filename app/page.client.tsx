@@ -1,4 +1,5 @@
 import { render } from 'melina/client'
+import type { HeroAction, HeroVariant, LandingExperiment } from '../lib/experiments'
 
 type PhantomProvider = {
   isPhantom?: boolean
@@ -79,6 +80,11 @@ type WheelState = {
   gravityBurned: number; stardustEarned: number; error: string | null
 }
 
+type LandingExperimentPayload = {
+  heroCtaExperiment: LandingExperiment
+  initial: { heroCtaVariant: HeroVariant }
+}
+
 const WHEEL_COLORS = ['#8b5cf6', '#06b6d4', '#ec4899', '#f59e0b', '#22c55e', '#6366f1', '#ef4444', '#14b8a6']
 const DEFAULT_VISIBLE_HOLDERS = 20
 const encoder = new TextEncoder()
@@ -103,6 +109,42 @@ function readInitialJson<T>(id: string): T | null {
   const text = node?.textContent?.trim()
   if (!text || text === 'null') return null
   try { return JSON.parse(text) as T } catch { return null }
+}
+
+function readCookie(name: string) {
+  const prefix = `${name}=`
+  for (const part of document.cookie.split(';')) {
+    const trimmed = part.trim()
+    if (trimmed.startsWith(prefix)) return decodeURIComponent(trimmed.slice(prefix.length))
+  }
+  return null
+}
+
+function writeCookie(name: string, value: string) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`
+}
+
+function getValidVariantId(experiment: LandingExperiment, value: string | null | undefined) {
+  return value && experiment.variants[value] ? value : null
+}
+
+function resolveExperimentVariant(experiment: LandingExperiment) {
+  const url = new URL(window.location.href)
+  const queryChoice = getValidVariantId(experiment, url.searchParams.get(experiment.queryParam))
+  const cookieChoice = getValidVariantId(experiment, readCookie(experiment.cookieName))
+  const storageChoice = getValidVariantId(experiment, window.localStorage.getItem(experiment.storageKey))
+  const variantId = queryChoice || cookieChoice || storageChoice || experiment.defaultVariant
+  try { window.localStorage.setItem(experiment.storageKey, variantId) } catch {}
+  writeCookie(experiment.cookieName, variantId)
+  return experiment.variants[variantId] || experiment.variants[experiment.defaultVariant]
+}
+
+function applyHeroAction(button: HTMLButtonElement | null, action: HeroAction, label: string, extraClass = '') {
+  if (!button) return
+  button.textContent = label
+  button.dataset.heroAction = action.type
+  button.dataset.heroHref = action.type === 'link' ? action.href : ''
+  if (extraClass) button.className = extraClass
 }
 
 function fmtUsd(n: number) {
@@ -307,6 +349,9 @@ function RewardWheelModal({ tiers, summary, state }: { tiers: RewardTier[]; summ
 
 export default function mount() {
   const cleanups: Array<() => void> = []
+  const experimentPayload = readInitialJson<LandingExperimentPayload>('landing-experiments-data')
+  const heroExperiment = experimentPayload?.heroCtaExperiment || null
+  let activeHeroVariant = experimentPayload?.initial.heroCtaVariant || null
   let marketData: MarketData | null = readInitialJson<MarketData>('ssr-market-data')
   let marketLoading = !marketData?.ok
   let gravityData: LeaderboardData | null = readInitialJson<LeaderboardData>('ssr-gravity-data')
@@ -332,6 +377,8 @@ export default function mount() {
     document.body.appendChild(wheelModalMount)
     cleanups.push(() => wheelModalMount?.remove())
   }
+
+  if (heroExperiment) activeHeroVariant = resolveExperimentVariant(heroExperiment)
 
   const fetchSpins = async (wallet?: string | null) => {
     try {
@@ -472,8 +519,35 @@ export default function mount() {
     if (claimableEl) claimableEl.textContent = walletSummary ? fmtSol(walletSummary.claimableAmount) : '—'
   }
 
+  const applyHeroVariant = () => {
+    if (!activeHeroVariant) return
+    const badge = document.getElementById('hero-badge')
+    const title = document.getElementById('hero-title')
+    const accent = document.getElementById('hero-title-accent')
+    const subheadline = document.getElementById('hero-subheadline')
+    const navCta = document.getElementById('nav-primary-cta') as HTMLAnchorElement | null
+    const connectBtn = document.getElementById('hero-connect-wallet-btn') as HTMLButtonElement | null
+    const spinBtn = document.getElementById('hero-spin-wheel-btn') as HTMLButtonElement | null
+
+    if (badge) badge.textContent = activeHeroVariant.badge
+    if (title) {
+      title.childNodes[0] && (title.childNodes[0].textContent = activeHeroVariant.title)
+    }
+    if (accent) accent.textContent = activeHeroVariant.titleAccent
+    if (subheadline) subheadline.textContent = activeHeroVariant.subheadline
+    if (navCta) {
+      navCta.textContent = activeHeroVariant.navCta.label
+      navCta.href = activeHeroVariant.navCta.href
+    }
+
+    applyHeroAction(connectBtn, activeHeroVariant.primaryCta.action, activeHeroVariant.primaryCta.label, 'btn-hero')
+    applyHeroAction(spinBtn, activeHeroVariant.secondaryCta.action, activeHeroVariant.secondaryCta.label, 'btn-hero btn-spin-hero')
+    document.documentElement.dataset.heroExperimentVariant = activeHeroVariant.id
+  }
+
   const renderAll = () => {
     updateHeroStats()
+    applyHeroVariant()
 
     if (marketRoot) render(<MarketPanel data={marketData} loading={marketLoading} />, marketRoot)
 
@@ -491,11 +565,41 @@ export default function mount() {
     // Wire hero buttons
     const heroConnect = document.getElementById('hero-connect-wallet-btn') as HTMLButtonElement | null
     if (heroConnect) {
-      heroConnect.onclick = () => { void connectWallet() }
-      heroConnect.textContent = connectedWallet ? (walletLoading ? 'Refreshing…' : '✓ Connected') : 'Connect Phantom'
+      const action = heroConnect.dataset.heroAction || 'connect'
+      heroConnect.onclick = () => {
+        if (action === 'spin') {
+          wheelState = { ...wheelState, open: true, error: null }
+          renderAll()
+          return
+        }
+        if (action === 'link') {
+          const href = heroConnect.dataset.heroHref || '#gravity-story'
+          window.location.href = href
+          return
+        }
+        void connectWallet()
+      }
+      if ((heroConnect.dataset.heroAction || 'connect') === 'connect' && connectedWallet) {
+        heroConnect.textContent = walletLoading ? 'Refreshing…' : '✓ Connected'
+      }
     }
     const heroSpin = document.getElementById('hero-spin-wheel-btn') as HTMLButtonElement | null
-    if (heroSpin) heroSpin.onclick = () => { wheelState = { ...wheelState, open: true, error: null }; renderAll() }
+    if (heroSpin) {
+      const action = heroSpin.dataset.heroAction || 'spin'
+      heroSpin.onclick = () => {
+        if (action === 'connect') {
+          void connectWallet()
+          return
+        }
+        if (action === 'link') {
+          const href = heroSpin.dataset.heroHref || '#gravity-story'
+          window.location.href = href
+          return
+        }
+        wheelState = { ...wheelState, open: true, error: null }
+        renderAll()
+      }
+    }
 
     // Wheel modal
     if (wheelModalMount) {

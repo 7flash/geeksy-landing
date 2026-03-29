@@ -58,7 +58,8 @@
 - [x] ~~**Harden production wheel rollout runbook**~~ - ✅ DONE. Updated `docs/DEPLOY.md` with the exact `bgrun@3.12.15` upgrade path, landing/gravity restart sequence, expected commit set, and API/log spot checks to use before the manual Phantom test.
 - [x] ~~**Add scripted production rollout helper**~~ - ✅ DONE. Added `scripts/prod-rollout.sh` to automate the `bgrun@3.12.15` upgrade, landing checkout reset, process restarts, health checks, and `[wheel]` log grep before manual Phantom verification.
 - [x] ~~**Fix Windows bgrun local run quirk**~~ - ✅ DONE. Added `scripts/dev-bgrun.ts` plus `npm run dev:bgrun` / `npm run dev:bgrun:dry`, which auto-pick a free local validation port starting at `3412` and launch the landing through `bgrun` without the old `bash -lc` workaround.
-- [ ] **Implement A/B testing framework** - Add capability to test different versions of the landing page to optimize conversion rates.
+- [x] ~~**Implement A/B testing framework**~~ - ✅ DONE. Added a lightweight experiment layer in `lib/experiments.ts` with query override + cookie/localStorage stickiness, wired hero/nav CTA variants into `app/page.tsx`, and applied client-side variant resolution in `app/page.client.tsx` so landing copy/CTA order can change without restructuring the page.
+- [ ] **Add experiment exposure/click analytics** - Record which hero variant was shown and which CTA was clicked so the new experiment framework can measure outcomes instead of only swapping copy.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 

@@ -2,6 +2,7 @@ import { Head } from 'melina/server'
 import { db, estimateTokenPriceUsd } from '../lib/db'
 import { getWalletMeta } from '../lib/gksy'
 import { getMarketSnapshotWithFallback } from '../lib/market-cache'
+import { getDefaultLandingExperimentPayload } from '../lib/experiments'
 
 type MarketSnapshot = {
   ok: boolean
@@ -210,6 +211,7 @@ function GravityFallback({ data }: { data: GravitySnapshot }) {
 export default async function LandingPage() {
   const marketSnapshot = await getMarketSnapshotForPage()
   const gravitySnapshot = getGravitySnapshot(30, marketSnapshot)
+  const experimentPayload = getDefaultLandingExperimentPayload()
   return (
     <>
       <Head>
@@ -238,18 +240,18 @@ export default async function LandingPage() {
               <a href="#stardust-prizes">Prizes</a>
               <a href="#stack">Stack</a>
               <a href="https://github.com/7flash/geeksy" target="_blank" rel="noopener">GitHub</a>
-              <a href="https://app.geeksy.xyz" className="btn-primary">Open App →</a>
+              <a href={experimentPayload.initial.heroCtaVariant.navCta.href} className="btn-primary" id="nav-primary-cta">{experimentPayload.initial.heroCtaVariant.navCta.label}</a>
             </div>
           </nav>
 
           <section className="hero gravity-hero" id="gravity-story">
             <div className="gravity-hero-copy">
-              <div className="hero-badge">Hold GKSY · Earn Gravity · Win SOL</div>
-              <h1>Hold GKSY.<br /><span className="gradient-text">Win SOL.</span></h1>
-              <p className="hero-sub">Every minute you hold GKSY tokens, you earn <strong>gravity</strong>. Connect your Phantom wallet and spin the cosmic wheel to <strong>burn all your gravity into stardust</strong> and win <strong>SOL from the treasury</strong>. The more gravity you have relative to other holders, the better your odds.</p>
+              <div className="hero-badge" id="hero-badge">{experimentPayload.initial.heroCtaVariant.badge}</div>
+              <h1 id="hero-title">{experimentPayload.initial.heroCtaVariant.title}<br /><span className="gradient-text" id="hero-title-accent">{experimentPayload.initial.heroCtaVariant.titleAccent}</span></h1>
+              <p className="hero-sub" id="hero-subheadline">{experimentPayload.initial.heroCtaVariant.subheadline}</p>
               <div className="gravity-hero-actions">
-                <button className="btn-hero" id="hero-connect-wallet-btn">Connect Phantom</button>
-                <button className="btn-hero btn-spin-hero" id="hero-spin-wheel-btn">🎰 Spin the Wheel</button>
+                <button className="btn-hero" id="hero-connect-wallet-btn">{experimentPayload.initial.heroCtaVariant.primaryCta.label}</button>
+                <button className="btn-hero btn-spin-hero" id="hero-spin-wheel-btn">{experimentPayload.initial.heroCtaVariant.secondaryCta.label}</button>
               </div>
               <div className="gravity-formula-card">
                 <div className="market-card-label">How gravity accrues</div>
@@ -303,6 +305,7 @@ export default async function LandingPage() {
         <div id="market-root"><MarketFallback data={marketSnapshot} /></div>
         <script id="ssr-market-data" type="application/json">{JSON.stringify(marketSnapshot)}</script>
         <script id="ssr-gravity-data" type="application/json">{JSON.stringify(gravitySnapshot)}</script>
+        <script id="landing-experiments-data" type="application/json">{JSON.stringify(experimentPayload)}</script>
       </section>
 
       <section className="section" id="stack">
