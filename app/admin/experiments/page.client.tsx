@@ -39,6 +39,7 @@ type ReportResponse = {
 
 const EXPERIMENT_ID_KEY = 'geeksy-admin-experiments:selected-id'
 const EXPERIMENT_DAYS_KEY = 'geeksy-admin-experiments:selected-days'
+const MIN_COMPARISON_EXPOSURES = 25
 
 function readInitialJson<T>(id: string): T | null {
   const node = document.getElementById(id)
@@ -59,8 +60,39 @@ function fmtPct(n: number) {
   return `${(n * 100).toFixed(2)}%`
 }
 
+function fmtDeltaPct(n: number | null) {
+  if (n == null || !Number.isFinite(n)) return '—'
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${(n * 100).toFixed(2)}%`
+}
+
 function fmtDateRange(from: number, to: number) {
   return `${new Date(from).toLocaleString()} → ${new Date(to).toLocaleString()}`
+}
+
+function buildVariantComparison(report: ExperimentReport | null) {
+  if (!report) return { rows: [], controlVariantId: null as string | null, leaderVariantId: null as string | null, sampleHint: null as string | null }
+
+  const control = report.variants.find((variant) => variant.variantId === 'control') || report.variants[0] || null
+  const controlVariantId = control?.variantId || null
+  const sampled = report.variants.filter((variant) => variant.exposures >= MIN_COMPARISON_EXPOSURES)
+  const leader = sampled.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
+  const lowSampleCount = report.variants.filter((variant) => variant.exposures < MIN_COMPARISON_EXPOSURES).length
+
+  return {
+    controlVariantId,
+    leaderVariantId: leader?.variantId || null,
+    sampleHint: lowSampleCount > 0
+      ? `${lowSampleCount} variant${lowSampleCount === 1 ? '' : 's'} below ${MIN_COMPARISON_EXPOSURES} exposures — treat results as directional, not decisive.`
+      : `All visible variants have at least ${MIN_COMPARISON_EXPOSURES} exposures.` ,
+    rows: report.variants.map((variant) => ({
+      ...variant,
+      deltaVsControl: control ? variant.ctr - control.ctr : null,
+      sampleStatus: variant.exposures >= MIN_COMPARISON_EXPOSURES ? 'enough' : 'low',
+      isLeader: !!leader && variant.variantId === leader.variantId,
+      isControl: !!control && variant.variantId === control.variantId,
+    })),
+  }
 }
 
 function ReportMetricCard({ label, value, sub }: { label: string; value: string | number; sub: string }) {
@@ -86,6 +118,7 @@ function AdminExperimentsApp({
   error: string | null
   report: ExperimentReport | null
 }) {
+  const comparison = buildVariantComparison(report)
   return <div className="admin-claims-shell">
     <div className="admin-toolbar-card">
       <div className="admin-toolbar-grid admin-experiments-toolbar-grid">
@@ -137,17 +170,27 @@ function AdminExperimentsApp({
           </div>
           <div className="gravity-wallet-state">{report.variants.length} variant{report.variants.length === 1 ? '' : 's'}</div>
         </div>
-        {!report.variants.length ? <div className="admin-empty-card">No experiment events recorded for this window yet.</div> : <div className="holders-table-wrap">
+        {comparison.sampleHint ? <div className="admin-experiment-hint">{comparison.sampleHint}</div> : null}
+        {comparison.leaderVariantId ? <div className="admin-experiment-leader">Current leader: <code>{comparison.leaderVariantId}</code>{comparison.controlVariantId ? <> · vs control <code>{comparison.controlVariantId}</code></> : null}</div> : null}
+        {!comparison.rows.length ? <div className="admin-empty-card">No experiment events recorded for this window yet.</div> : <div className="holders-table-wrap">
           <table className="holders-table">
             <thead>
-              <tr><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th><th>Unique Visitors</th></tr>
+              <tr><th>Variant</th><th>Status</th><th>Exposures</th><th>Clicks</th><th>CTR</th><th>Δ vs Control</th><th>Unique Visitors</th></tr>
             </thead>
             <tbody>
-              {report.variants.map((variant) => <tr key={variant.variantId}>
-                <td><code>{variant.variantId}</code></td>
+              {comparison.rows.map((variant) => <tr key={variant.variantId} className={variant.isLeader ? 'admin-experiment-row-leader' : variant.isControl ? 'admin-experiment-row-control' : ''}>
+                <td>
+                  <div className="admin-experiment-variant-cell">
+                    <code>{variant.variantId}</code>
+                    {variant.isLeader ? <span className="admin-experiment-pill admin-experiment-pill-leader">Leader</span> : null}
+                    {variant.isControl ? <span className="admin-experiment-pill admin-experiment-pill-control">Control</span> : null}
+                  </div>
+                </td>
+                <td><span className={`admin-experiment-pill ${variant.sampleStatus === 'enough' ? 'admin-experiment-pill-sampled' : 'admin-experiment-pill-low-sample'}`}>{variant.sampleStatus === 'enough' ? 'Sample OK' : 'Low Sample'}</span></td>
                 <td>{variant.exposures}</td>
                 <td>{variant.clicks}</td>
                 <td>{fmtPct(variant.ctr)}</td>
+                <td className={variant.deltaVsControl != null ? (variant.deltaVsControl > 0 ? 'admin-delta-pos' : variant.deltaVsControl < 0 ? 'admin-delta-neg' : '') : ''}>{variant.isControl ? 'baseline' : fmtDeltaPct(variant.deltaVsControl)}</td>
                 <td>{variant.uniqueVisitors}</td>
               </tr>)}
             </tbody>

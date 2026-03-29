@@ -275,6 +275,17 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .admin-settle-box { display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end; }
 .admin-empty-card { color:var(--text2); }
 .admin-link-btn { display:inline-flex; align-items:center; justify-content:center; text-decoration:none !important; }
+.admin-experiment-hint { margin:14px 0; padding:12px 14px; border-radius:14px; background:rgba(245,158,11,.10); border:1px solid rgba(245,158,11,.22); color:#fde68a; font-size:13px; }
+.admin-experiment-leader { margin-bottom:14px; padding:12px 14px; border-radius:14px; background:rgba(34,197,94,.10); border:1px solid rgba(34,197,94,.22); color:#bbf7d0; font-size:13px; }
+.admin-experiment-variant-cell { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.admin-experiment-pill { display:inline-flex; align-items:center; justify-content:center; padding:5px 9px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.02em; border:1px solid rgba(255,255,255,.12); }
+.admin-experiment-pill-leader, .admin-experiment-pill-sampled { background:rgba(34,197,94,.12); border-color:rgba(34,197,94,.24); color:#86efac; }
+.admin-experiment-pill-control { background:rgba(99,102,241,.12); border-color:rgba(99,102,241,.24); color:#c7d2fe; }
+.admin-experiment-pill-low-sample { background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.24); color:#fcd34d; }
+.admin-experiment-row-leader td { background:rgba(34,197,94,.05); }
+.admin-experiment-row-control td { background:rgba(99,102,241,.05); }
+.admin-delta-pos { color:#86efac !important; font-weight:700; }
+.admin-delta-neg { color:#fca5a5 !important; font-weight:700; }
 
 /* Stardust & Gravity coloring */
 .stardust-value, .stardust-cell { color: #f59e0b !important; }

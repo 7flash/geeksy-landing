@@ -63,7 +63,8 @@
 - [x] ~~**Add experiment reporting/export surface**~~ - ✅ DONE. Extended `/api/analytics/experiment` with a GET report/export path that returns variant/CTA summaries as JSON and supports CSV export for spreadsheet analysis.
 - [x] ~~**Add experiment report UI**~~ - ✅ DONE. Added `/admin/experiments` as a lightweight internal report page with experiment/time-window selectors, summary cards, variant/CTA tables, and CSV export backed by the analytics API.
 - [x] ~~**Persist experiment UI filters locally**~~ - ✅ DONE. `/admin/experiments` now restores and persists the selected experiment id and time window from browser `localStorage` so repeated operator review is faster.
-- [ ] **Add experiment comparison helpers** - Add quick deltas, winner highlighting, or minimum-sample hints to the experiment report UI so operators can interpret results faster than raw CTR tables alone.
+- [x] ~~**Add experiment comparison helpers**~~ - ✅ DONE. `/admin/experiments` now highlights the current leader, shows CTR deltas vs control, and surfaces low-sample warnings so operators can interpret experiment results faster without raw-table-only analysis.
+- [ ] **Add experiment trend/history view** - Show experiment performance over time (for example by day) so operators can tell whether a variant lead is stable or just a short-window spike.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
