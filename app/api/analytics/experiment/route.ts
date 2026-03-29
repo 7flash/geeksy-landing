@@ -1,4 +1,33 @@
-import { recordExperimentEvent } from '../../../../lib/analytics'
+import { getExperimentReport, recordExperimentEvent, toExperimentReportCsv } from '../../../../lib/analytics'
+
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url)
+    const experimentId = (url.searchParams.get('experimentId') || '').trim()
+    const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '30', 10) || 30, 1), 365)
+    const format = (url.searchParams.get('format') || 'json').trim()
+    if (!experimentId) {
+      return Response.json({ ok: false, error: 'experimentId is required' }, { status: 400 })
+    }
+
+    const until = Date.now()
+    const since = until - (days * 24 * 60 * 60 * 1000)
+    const report = getExperimentReport(experimentId, { since, until })
+
+    if (format === 'csv') {
+      return new Response(toExperimentReportCsv(report), {
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="${experimentId}-experiment-report.csv"`,
+        },
+      })
+    }
+
+    return Response.json({ ok: true, report })
+  } catch (error: any) {
+    return Response.json({ ok: false, error: error?.message || 'Failed to load experiment report' }, { status: 500 })
+  }
+}
 
 export async function POST(req: Request) {
   try {

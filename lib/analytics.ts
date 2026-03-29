@@ -15,6 +15,35 @@ export type ExperimentEventInput = {
   createdAt?: number
 }
 
+export type ExperimentVariantReportRow = {
+  variantId: string
+  exposures: number
+  clicks: number
+  uniqueVisitors: number
+  ctr: number
+}
+
+export type ExperimentCtaReportRow = {
+  variantId: string
+  ctaId: string | null
+  ctaLabel: string | null
+  clicks: number
+}
+
+export type ExperimentReport = {
+  experimentId: string
+  since: number
+  until: number
+  totals: {
+    exposures: number
+    clicks: number
+    uniqueVisitors: number
+    ctr: number
+  }
+  variants: ExperimentVariantReportRow[]
+  ctas: ExperimentCtaReportRow[]
+}
+
 export function recordExperimentEvent(input: ExperimentEventInput) {
   const createdAt = input.createdAt || Date.now()
   const id = randomUUID()
@@ -41,4 +70,86 @@ export function recordExperimentEvent(input: ExperimentEventInput) {
   )
 
   return { id, createdAt }
+}
+
+export function getExperimentReport(experimentId: string, { since = 0, until = Date.now() }: { since?: number; until?: number } = {}): ExperimentReport {
+  const totals = db.query(`
+    SELECT
+      COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
+      COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks,
+      COUNT(DISTINCT COALESCE(visitor_id, session_id, id)) as uniqueVisitors
+    FROM experiment_events
+    WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
+  `).get(experimentId, since, until) as {
+    exposures: number
+    clicks: number
+    uniqueVisitors: number
+  }
+
+  const variants = db.query(`
+    SELECT
+      variant_id as variantId,
+      COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
+      COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks,
+      COUNT(DISTINCT COALESCE(visitor_id, session_id, id)) as uniqueVisitors
+    FROM experiment_events
+    WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
+    GROUP BY variant_id
+    ORDER BY exposures DESC, clicks DESC, variant_id ASC
+  `).all(experimentId, since, until) as Array<{
+    variantId: string
+    exposures: number
+    clicks: number
+    uniqueVisitors: number
+  }>
+
+  const ctas = db.query(`
+    SELECT
+      variant_id as variantId,
+      cta_id as ctaId,
+      cta_label as ctaLabel,
+      COUNT(*) as clicks
+    FROM experiment_events
+    WHERE experiment_id = ? AND event_type = 'click' AND created_at >= ? AND created_at <= ?
+    GROUP BY variant_id, cta_id, cta_label
+    ORDER BY clicks DESC, variant_id ASC, cta_id ASC
+  `).all(experimentId, since, until) as ExperimentCtaReportRow[]
+
+  const totalExposures = Number(totals?.exposures || 0)
+  const totalClicks = Number(totals?.clicks || 0)
+
+  return {
+    experimentId,
+    since,
+    until,
+    totals: {
+      exposures: totalExposures,
+      clicks: totalClicks,
+      uniqueVisitors: Number(totals?.uniqueVisitors || 0),
+      ctr: totalExposures > 0 ? totalClicks / totalExposures : 0,
+    },
+    variants: variants.map((row) => ({
+      variantId: row.variantId,
+      exposures: Number(row.exposures || 0),
+      clicks: Number(row.clicks || 0),
+      uniqueVisitors: Number(row.uniqueVisitors || 0),
+      ctr: Number(row.exposures || 0) > 0 ? Number(row.clicks || 0) / Number(row.exposures || 0) : 0,
+    })),
+    ctas,
+  }
+}
+
+export function toExperimentReportCsv(report: ExperimentReport) {
+  const lines = [
+    'section,experimentId,variantId,ctaId,ctaLabel,exposures,clicks,uniqueVisitors,ctr,since,until',
+    `totals,${report.experimentId},,,,${report.totals.exposures},${report.totals.clicks},${report.totals.uniqueVisitors},${report.totals.ctr},${report.since},${report.until}`,
+    ...report.variants.map((row) => `variant,${report.experimentId},${row.variantId},,,${row.exposures},${row.clicks},${row.uniqueVisitors},${row.ctr},${report.since},${report.until}`),
+    ...report.ctas.map((row) => `cta,${report.experimentId},${row.variantId},${row.ctaId || ''},${escapeCsv(row.ctaLabel || '')},,${row.clicks},,,${report.since},${report.until}`),
+  ]
+  return lines.join('\n')
+}
+
+function escapeCsv(value: string) {
+  if (!/[",\n]/.test(value)) return value
+  return `"${value.replace(/"/g, '""')}"`
 }
