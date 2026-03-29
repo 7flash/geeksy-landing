@@ -57,6 +57,8 @@ function loadEnvWalletLabels() {
   add(process.env.GKSY_TEAM_WALLET, 'Geeksy Team')
   add(process.env.GKSY_BONDING_CURVE_WALLET, 'Bonding Curve')
   add(process.env.GKSY_EXCHANGE_WALLET, 'Exchange Wallet')
+  add(process.env.GKSY_LP_WALLET, 'GKSY LP')
+  add(process.env.GKSY_INTERNAL_WALLET, 'Internal Ops')
 
   for (const [key, value] of Object.entries(process.env)) {
     const match = key.match(/^KNOWN_WALLET_(.+)$/)

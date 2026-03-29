@@ -1,6 +1,8 @@
 {
   "FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM": "GKSY LP",
-  "TREASURY_WALLET_HERE": "Geeksy Treasury",
-  "TEAM_WALLET_HERE": "Geeksy Team",
-  "BONDING_CURVE_WALLET_HERE": "Bonding Curve"
+  "REPLACE_WITH_TREASURY_WALLET": "Geeksy Treasury",
+  "REPLACE_WITH_TEAM_WALLET": "Geeksy Team",
+  "REPLACE_WITH_BONDING_CURVE_WALLET": "Bonding Curve",
+  "REPLACE_WITH_EXCHANGE_WALLET": "Exchange Wallet",
+  "REPLACE_WITH_INTERNAL_OPS_WALLET": "Internal Ops"
 }

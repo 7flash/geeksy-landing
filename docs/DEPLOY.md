@@ -83,7 +83,58 @@ curl -s https://geeksy.xyz/api/leaderboard?limit=3 | head
 curl -s https://geeksy.xyz/api/market | head
 ```
 
-## 4. Live Phantom test checklist
+## 4. Populate production wallet labels (recommended before live testing)
+
+The leaderboard now supports readable entity names and badges (`Treasury`, `LP`, `Team`, `Bonding Curve`, `Exchange`, `Internal`).
+Populate them on the server before the Phantom walkthrough so the live table reads cleanly.
+
+Two supported paths:
+
+### Option A — file-based registry
+
+```bash
+cd /opt/geeksy-landing
+cp known-wallets.example.json known-wallets.json
+nano known-wallets.json
+```
+
+Then replace the placeholder addresses with the real wallet addresses.
+The app auto-loads:
+
+- `/opt/geeksy-landing/known-wallets.json`
+- or `KNOWN_WALLETS_PATH`
+
+### Option B — env-driven labels
+
+Set any of these on the server process env and restart:
+
+```bash
+GKSY_TREASURY_WALLET=<wallet>
+GKSY_TEAM_WALLET=<wallet>
+GKSY_BONDING_CURVE_WALLET=<wallet>
+GKSY_EXCHANGE_WALLET=<wallet>
+GKSY_LP_WALLET=<wallet>
+GKSY_INTERNAL_WALLET=<wallet>
+```
+
+You can also use generic custom labels:
+
+```bash
+KNOWN_WALLET_MARKETING_WALLET=<wallet>
+KNOWN_WALLET_OTC_DESK=<wallet>
+```
+
+These become labels like `MARKETING WALLET` and `OTC DESK` automatically.
+
+### Quick verification
+
+```bash
+curl -s https://geeksy.xyz/api/leaderboard?limit=10 | head
+```
+
+Check that rows now include the expected `walletLabel`, `walletDisplay`, and `walletType` values.
+
+## 5. Live Phantom test checklist
 
 Open `https://geeksy.xyz` in a browser with Phantom installed.
 
@@ -98,7 +149,7 @@ Verify:
 7. Request claim succeeds
 8. Refresh and confirm claim state persists
 
-## 5. Inspect structured wheel logs during failures
+## 6. Inspect structured wheel logs during failures
 
 The wheel API now emits structured log lines prefixed with `[wheel]`.
 
@@ -128,7 +179,7 @@ The logs include safe debugging metadata only:
 - reward tier / amount
 - error message + HTTP status
 
-## 6. Quick API spot checks from the server
+## 7. Quick API spot checks from the server
 
 If the UI is unclear, test the read endpoints directly:
 
@@ -139,7 +190,7 @@ curl -s "https://geeksy.xyz/api/wheel/spins?wallet=<WALLET>&limit=5"
 curl -s "https://geeksy.xyz/api/wheel/claims?wallet=<WALLET>&limit=5"
 ```
 
-## 7. If the wheel still fails
+## 8. If the wheel still fails
 
 Use the first failing stage to narrow it down:
 
