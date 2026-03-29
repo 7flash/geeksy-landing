@@ -8,10 +8,24 @@ For the repeatable scripted path, use:
 bash scripts/prod-rollout.sh
 ```
 
+That script now performs:
+- `bgrun` upgrade
+- repo reset/redeploy
+- process restarts
+- health checks
+- wheel treasury preflight
+- recent `[wheel]` log tail
+
 Optional host override:
 
 ```bash
 bash scripts/prod-rollout.sh root@202.155.132.139
+```
+
+Optional skip-preflight mode:
+
+```bash
+RUN_PREFLIGHT=0 bash scripts/prod-rollout.sh
 ```
 
 ## Production target

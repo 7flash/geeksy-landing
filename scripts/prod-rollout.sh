@@ -7,6 +7,7 @@ BGRUN_VERSION="${BGRUN_VERSION:-3.12.15}"
 LANDING_PROCESS="${LANDING_PROCESS:-geeksy-landing}"
 GRAVITY_PROCESS="${GRAVITY_PROCESS:-geeksy-gravity}"
 DOMAIN="${DOMAIN:-https://geeksy.xyz}"
+RUN_PREFLIGHT="${RUN_PREFLIGHT:-1}"
 
 printf '==> Rolling out %s on %s using bgrun@%s\n' "$APP_DIR" "$HOST" "$BGRUN_VERSION"
 
@@ -16,6 +17,7 @@ ssh "$HOST" \
   LANDING_PROCESS="$LANDING_PROCESS" \
   GRAVITY_PROCESS="$GRAVITY_PROCESS" \
   DOMAIN="$DOMAIN" \
+  RUN_PREFLIGHT="$RUN_PREFLIGHT" \
   'bash -se' <<'REMOTE'
 set -euo pipefail
 
@@ -51,6 +53,13 @@ curl -s "$DOMAIN/api/leaderboard?limit=3" | head
 printf '\n'
 curl -s "$DOMAIN/api/market" | head
 printf '\n'
+
+if [ "$RUN_PREFLIGHT" = "1" ] || [ "$RUN_PREFLIGHT" = "true" ] || [ "$RUN_PREFLIGHT" = "yes" ]; then
+  printf '\n==> Wheel treasury preflight\n'
+  bun run scripts/wheel-preflight.ts
+else
+  printf '\n==> Wheel treasury preflight skipped (RUN_PREFLIGHT=%s)\n' "$RUN_PREFLIGHT"
+fi
 
 printf '\n==> Recent wheel logs\n'
 bgrun logs "$LANDING_PROCESS" --lines 120 | rg "\[wheel\]" || true
