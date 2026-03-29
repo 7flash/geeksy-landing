@@ -119,6 +119,30 @@ function ReportMetricCard({ label, value, sub }: { label: string; value: string 
   </div>
 }
 
+function buildPeriodSummary(report: ExperimentReport | null) {
+  if (!report?.trend.length) {
+    return { currentLabel: null as string | null, previousLabel: null as string | null, leader: null as null | { variantId: string; ctr: number }, controlDelta: null as number | null, leaderDelta: null as number | null }
+  }
+
+  const labels = Array.from(new Set(report.trend.map((row) => row.label))).sort((a, b) => b.localeCompare(a))
+  const currentLabel = labels[0] || null
+  const previousLabel = labels[1] || null
+  const currentRows = report.trend.filter((row) => row.label === currentLabel)
+  const previousRows = report.trend.filter((row) => row.label === previousLabel)
+  const leader = currentRows.slice().sort((a, b) => b.ctr - a.ctr || b.exposures - a.exposures)[0] || null
+  const currentControl = currentRows.find((row) => row.variantId === 'control') || null
+  const previousControl = previousRows.find((row) => row.variantId === 'control') || null
+  const previousLeader = leader ? previousRows.find((row) => row.variantId === leader.variantId) || null : null
+
+  return {
+    currentLabel,
+    previousLabel,
+    leader: leader ? { variantId: leader.variantId, ctr: leader.ctr } : null,
+    controlDelta: currentControl && previousControl ? currentControl.ctr - previousControl.ctr : null,
+    leaderDelta: leader && previousLeader ? leader.ctr - previousLeader.ctr : null,
+  }
+}
+
 function TrendChart({ trend, metric, onMetricChange }: { trend: ExperimentReport['trend']; metric: TrendMetric; onMetricChange: (metric: TrendMetric) => void }) {
   if (!trend.length) return null
 
@@ -204,6 +228,7 @@ function AdminExperimentsApp({
   onTrendGroupByChange: (groupBy: TrendGroupBy) => void
 }) {
   const comparison = buildVariantComparison(report)
+  const periodSummary = buildPeriodSummary(report)
   return <div className="admin-claims-shell">
     <div className="admin-toolbar-card">
       <div className="admin-toolbar-grid admin-experiments-toolbar-grid">
@@ -298,6 +323,28 @@ function AdminExperimentsApp({
           </div>
           <div className="gravity-wallet-state">{report.trend.length} {trendGroupBy === 'week' ? 'week' : 'period'}-row{report.trend.length === 1 ? '' : 's'}</div>
         </div>
+        {periodSummary.currentLabel ? <div className="admin-period-summary-grid">
+          <div className="admin-period-summary-card">
+            <div className="market-card-label">Current {trendGroupBy === 'week' ? 'Week' : 'Period'}</div>
+            <div className="wallet-summary-value"><code>{periodSummary.currentLabel}</code></div>
+            <p>{periodSummary.previousLabel ? `Comparing against ${periodSummary.previousLabel}.` : 'No previous period available yet.'}</p>
+          </div>
+          <div className="admin-period-summary-card">
+            <div className="market-card-label">Current Leader</div>
+            <div className="wallet-summary-value">{periodSummary.leader ? <code>{periodSummary.leader.variantId}</code> : '—'}</div>
+            <p>{periodSummary.leader ? `${fmtPct(periodSummary.leader.ctr)} ${trendGroupBy === 'week' ? 'this week' : 'this period'}.` : 'No leader yet.'}</p>
+          </div>
+          <div className="admin-period-summary-card">
+            <div className="market-card-label">Leader vs Previous</div>
+            <div className={`wallet-summary-value ${periodSummary.leaderDelta != null ? (periodSummary.leaderDelta > 0 ? 'admin-delta-pos' : periodSummary.leaderDelta < 0 ? 'admin-delta-neg' : '') : ''}`}>{fmtDeltaPct(periodSummary.leaderDelta)}</div>
+            <p>{periodSummary.previousLabel ? 'CTR change for the current leader vs the previous grouped period.' : 'Need two grouped periods to compare momentum.'}</p>
+          </div>
+          <div className="admin-period-summary-card">
+            <div className="market-card-label">Control vs Previous</div>
+            <div className={`wallet-summary-value ${periodSummary.controlDelta != null ? (periodSummary.controlDelta > 0 ? 'admin-delta-pos' : periodSummary.controlDelta < 0 ? 'admin-delta-neg' : '') : ''}`}>{fmtDeltaPct(periodSummary.controlDelta)}</div>
+            <p>{periodSummary.previousLabel ? 'Control CTR change vs the previous grouped period.' : 'Need two grouped periods to compare control movement.'}</p>
+          </div>
+        </div> : null}
         {!report.trend.length ? <div className="admin-empty-card">No {trendGroupBy} trend rows recorded for this window yet.</div> : <>
           <TrendChart trend={report.trend} metric={trendMetric} onMetricChange={onTrendMetricChange} />
           <div className="holders-table-wrap">
