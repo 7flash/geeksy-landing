@@ -410,7 +410,7 @@ function AdminExperimentsApp({
             <div className={`wallet-summary-value ${periodSummary.controlDelta != null ? (periodSummary.controlDelta > 0 ? 'admin-delta-pos' : periodSummary.controlDelta < 0 ? 'admin-delta-neg' : '') : ''}`}>{fmtDeltaPct(periodSummary.controlDelta)}</div>
             <p>{periodSummary.previousLabel ? 'Control CTR change vs the previous grouped period.' : 'Need two grouped periods to compare control movement.'}</p>
           </div>
-          <div className="admin-period-summary-card">
+          <div className="admin-period-summary-card admin-period-summary-card-wide">
             <div className="market-card-label">{periodSummary.baselineTitle}</div>
             <div className="wallet-summary-value">{baselineMode === 'none' ? 'Off' : baselineMode === 'control' ? 'Control' : 'Leader'}</div>
             <p>{periodSummary.baselineMessage}</p>

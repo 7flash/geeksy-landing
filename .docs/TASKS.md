@@ -72,7 +72,8 @@
 - [x] ~~**Add experiment sample-threshold controls**~~ - ✅ DONE. `/admin/experiments` now lets operators choose the exposure threshold used for leader highlighting and low-sample warnings, and persists that threshold locally.
 - [x] ~~**Add experiment control baseline toggle**~~ - ✅ DONE. `/admin/experiments` now lets operators choose `control`, `current leader`, or `none` as the comparison baseline for UI delta interpretation, with the choice persisted locally.
 - [x] ~~**Add experiment baseline messaging polish**~~ - ✅ DONE. `/admin/experiments` now explicitly distinguishes baseline disabled, baseline unavailable, and active-baseline states in both the variant summary text and grouped period summary cards.
-- [ ] **Add experiment summary layout polish** - Tighten the grouped summary card layout now that baseline-state messaging adds a fifth card, especially for smaller desktop widths.
+- [x] ~~**Add experiment summary layout polish**~~ - ✅ DONE. The grouped summary now uses a responsive auto-fit grid, keeps cards equal-height, and lets the baseline-state card span wider space on larger screens while collapsing cleanly on narrower widths.
+- [ ] **Add experiment trend table labeling polish** - Rename the grouped trend table header from `Day` to a grouping-aware label and tighten period labels for weekly mode.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
 
