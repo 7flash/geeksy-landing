@@ -136,6 +136,22 @@ cd /opt/geeksy-landing
 bun run scripts/payout-command.example.ts
 ```
 
+For safe contract validation without moving funds, use the runnable mock command:
+
+```bash
+cd /opt/geeksy-landing
+PAYOUT_MOCK_MODE=claimed bun run scripts/payout-command.mock.ts <<'EOF'
+{"requestId":"demo","wallet":"demo-wallet","amount":0.1,"token":"SOL","claimCount":1,"claimIds":["demo-claim"],"createdAt":0,"updatedAt":0}
+EOF
+```
+
+You can also temporarily point the real preflight/worker path at the mock:
+
+```bash
+export TREASURY_PAYOUT_COMMAND="PAYOUT_MOCK_MODE=claimed bun run scripts/payout-command.mock.ts"
+npm run wheel:preflight
+```
+
 The worker/preflight command contract is:
 - JSON request via `stdin`
 - JSON response via `stdout`
