@@ -158,6 +158,12 @@ Or use the built-in helper (it picks a Windows-safe vs Unix-safe mock command au
 npm run wheel:preflight:mock-payout
 ```
 
+If you want to exercise the payout worker itself against the mock sender, use:
+
+```bash
+PAYOUT_ACTION=process PAYOUT_DRY_RUN=false npm run payout:worker:mock
+```
+
 The worker/preflight command contract is:
 - JSON request via `stdin`
 - JSON response via `stdout`

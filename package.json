@@ -14,6 +14,7 @@
     "typecheck": "bunx tsc --noEmit",
     "test:wheel": "bun test lib/wheel.test.ts",
     "payout:worker": "bun run scripts/payout-worker.ts",
+    "payout:worker:mock": "bun run scripts/payout-worker-mock.ts",
     "treasury:snapshot": "bun run scripts/treasury-snapshot.ts"
   },
   "dependencies": {
