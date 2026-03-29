@@ -287,7 +287,11 @@ code { font-family:var(--mono); font-size:.9em; background:var(--surface2); padd
 .admin-delta-pos { color:#86efac !important; font-weight:700; }
 .admin-delta-neg { color:#fca5a5 !important; font-weight:700; }
 .admin-trend-chart-shell { margin:14px 0 18px; padding:16px; border-radius:18px; border:1px solid rgba(129,140,248,.16); background:rgba(17,17,40,.6); }
-.admin-trend-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:14px; }
+.admin-trend-chart-topbar { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+.admin-trend-legend { display:flex; flex-wrap:wrap; gap:12px; }
+.admin-trend-toggle-group { display:flex; flex-wrap:wrap; gap:8px; }
+.admin-trend-toggle { background:rgba(17,17,40,.82); border:1px solid rgba(129,140,248,.18); color:var(--text2); border-radius:999px; padding:8px 12px; font:inherit; font-size:12px; cursor:pointer; }
+.admin-trend-toggle-active { color:var(--text); border-color:rgba(129,140,248,.32); background:rgba(99,102,241,.14); }
 .admin-trend-legend-item { display:inline-flex; align-items:center; gap:8px; color:var(--text2); font-size:12px; }
 .admin-trend-legend-dot { width:10px; height:10px; border-radius:999px; display:inline-block; }
 .admin-trend-chart { width:100%; height:auto; display:block; }
