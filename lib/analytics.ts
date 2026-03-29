@@ -30,6 +30,15 @@ export type ExperimentCtaReportRow = {
   clicks: number
 }
 
+export type ExperimentDailyReportRow = {
+  day: string
+  dayStart: number
+  variantId: string
+  exposures: number
+  clicks: number
+  ctr: number
+}
+
 export type ExperimentReport = {
   experimentId: string
   since: number
@@ -42,6 +51,7 @@ export type ExperimentReport = {
   }
   variants: ExperimentVariantReportRow[]
   ctas: ExperimentCtaReportRow[]
+  daily: ExperimentDailyReportRow[]
 }
 
 export function recordExperimentEvent(input: ExperimentEventInput) {
@@ -115,6 +125,25 @@ export function getExperimentReport(experimentId: string, { since = 0, until = D
     ORDER BY clicks DESC, variant_id ASC, cta_id ASC
   `).all(experimentId, since, until) as ExperimentCtaReportRow[]
 
+  const daily = db.query(`
+    SELECT
+      strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') as day,
+      (CAST(strftime('%s', strftime('%Y-%m-%d', created_at / 1000, 'unixepoch') || ' 00:00:00') AS INTEGER) * 1000) as dayStart,
+      variant_id as variantId,
+      COUNT(CASE WHEN event_type = 'exposure' THEN 1 END) as exposures,
+      COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks
+    FROM experiment_events
+    WHERE experiment_id = ? AND created_at >= ? AND created_at <= ?
+    GROUP BY day, dayStart, variant_id
+    ORDER BY dayStart DESC, variant_id ASC
+  `).all(experimentId, since, until) as Array<{
+    day: string
+    dayStart: number
+    variantId: string
+    exposures: number
+    clicks: number
+  }>
+
   const totalExposures = Number(totals?.exposures || 0)
   const totalClicks = Number(totals?.clicks || 0)
 
@@ -136,6 +165,14 @@ export function getExperimentReport(experimentId: string, { since = 0, until = D
       ctr: Number(row.exposures || 0) > 0 ? Number(row.clicks || 0) / Number(row.exposures || 0) : 0,
     })),
     ctas,
+    daily: daily.map((row) => ({
+      day: row.day,
+      dayStart: Number(row.dayStart || 0),
+      variantId: row.variantId,
+      exposures: Number(row.exposures || 0),
+      clicks: Number(row.clicks || 0),
+      ctr: Number(row.exposures || 0) > 0 ? Number(row.clicks || 0) / Number(row.exposures || 0) : 0,
+    })),
   }
 }
 
@@ -145,6 +182,7 @@ export function toExperimentReportCsv(report: ExperimentReport) {
     `totals,${report.experimentId},,,,${report.totals.exposures},${report.totals.clicks},${report.totals.uniqueVisitors},${report.totals.ctr},${report.since},${report.until}`,
     ...report.variants.map((row) => `variant,${report.experimentId},${row.variantId},,,${row.exposures},${row.clicks},${row.uniqueVisitors},${row.ctr},${report.since},${report.until}`),
     ...report.ctas.map((row) => `cta,${report.experimentId},${row.variantId},${row.ctaId || ''},${escapeCsv(row.ctaLabel || '')},,${row.clicks},,,${report.since},${report.until}`),
+    ...report.daily.map((row) => `daily,${report.experimentId},${row.variantId},${row.day},,${row.exposures},${row.clicks},,${row.ctr},${row.dayStart},${row.dayStart}`),
   ]
   return lines.join('\n')
 }

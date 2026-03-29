@@ -29,6 +29,14 @@ type ExperimentReport = {
     ctaLabel: string | null
     clicks: number
   }>
+  daily: Array<{
+    day: string
+    dayStart: number
+    variantId: string
+    exposures: number
+    clicks: number
+    ctr: number
+  }>
 }
 
 type ReportResponse = {
@@ -192,6 +200,32 @@ function AdminExperimentsApp({
                 <td>{fmtPct(variant.ctr)}</td>
                 <td className={variant.deltaVsControl != null ? (variant.deltaVsControl > 0 ? 'admin-delta-pos' : variant.deltaVsControl < 0 ? 'admin-delta-neg' : '') : ''}>{variant.isControl ? 'baseline' : fmtDeltaPct(variant.deltaVsControl)}</td>
                 <td>{variant.uniqueVisitors}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>}
+      </div>
+
+      <div className="admin-toolbar-card">
+        <div className="admin-queue-header">
+          <div>
+            <div className="market-card-label">Trend history</div>
+            <h3>Daily variant performance</h3>
+          </div>
+          <div className="gravity-wallet-state">{report.daily.length} day-row{report.daily.length === 1 ? '' : 's'}</div>
+        </div>
+        {!report.daily.length ? <div className="admin-empty-card">No daily trend rows recorded for this window yet.</div> : <div className="holders-table-wrap">
+          <table className="holders-table">
+            <thead>
+              <tr><th>Day</th><th>Variant</th><th>Exposures</th><th>Clicks</th><th>CTR</th></tr>
+            </thead>
+            <tbody>
+              {report.daily.map((row, index) => <tr key={`${row.day}:${row.variantId}:${index}`}>
+                <td><code>{row.day}</code></td>
+                <td><code>{row.variantId}</code></td>
+                <td>{row.exposures}</td>
+                <td>{row.clicks}</td>
+                <td>{fmtPct(row.ctr)}</td>
               </tr>)}
             </tbody>
           </table>
