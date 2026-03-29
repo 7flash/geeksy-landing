@@ -53,7 +53,7 @@
 - [x] ~~**Add stale-market UI hint**~~ - ✅ DONE. Both SSR and client-rendered market panels now show a clear cached-data notice when the landing is serving warm cache or stale Dexscreener fallback snapshots.
 - [x] ~~**Harden production wheel rollout runbook**~~ - ✅ DONE. Updated `docs/DEPLOY.md` with the exact `bgrun@3.12.15` upgrade path, landing/gravity restart sequence, expected commit set, and API/log spot checks to use before the manual Phantom test.
 - [x] ~~**Add scripted production rollout helper**~~ - ✅ DONE. Added `scripts/prod-rollout.sh` to automate the `bgrun@3.12.15` upgrade, landing checkout reset, process restarts, health checks, and `[wheel]` log grep before manual Phantom verification.
-- [ ] **Fix Windows bgrun local run quirk** - Direct local `bgrun --command "bun run server.ts"` on port `3400` is colliding with a stale Bun listener on this machine; `bgrun` validation works reliably via `bash -lc 'BUN_PORT=3412 bun run server.ts'` for now.
+- [x] ~~**Fix Windows bgrun local run quirk**~~ - ✅ DONE. Added `scripts/dev-bgrun.ts` plus `npm run dev:bgrun` / `npm run dev:bgrun:dry`, which auto-pick a free local validation port starting at `3412` and launch the landing through `bgrun` without the old `bash -lc` workaround.
 - [ ] **Implement A/B testing framework** - Add capability to test different versions of the landing page to optimize conversion rates.
 - [ ] **Add multilingual support** - Internationalize the landing page content to reach a broader audience.
 - [ ] **Create admin dashboard** - Build a simple admin interface to manage landing page content without code changes.
@@ -67,7 +67,7 @@
 - **Background scoring**: `scripts/gravity-worker.ts` should run under `bgrun` to update `gravity.db` every minute using the current GKSY USD price and live holder balances
 - **Repo**: `https://github.com/7flash/geeksy-landing`
 - **Deployment target**: `/opt/geeksy-landing` on server `202.155.132.139`
-- **Process manager**: bgrun process `geeksy-landing` for the main landing; local validation on this Windows machine currently works reliably with `bgrun --name geeksy-landing-bash --command "bash -lc 'BUN_PORT=3412 bun run server.ts'" --directory C:/Code/geeksy-landing`
+- **Process manager**: bgrun process `geeksy-landing` for the main landing; local validation on this Windows machine now uses `npm run dev:bgrun`, which auto-picks a free validation port starting at `3412` and launches a separate `geeksy-landing-local` process through `bgrun`
 - **Current domain**: `geeksy.xyz` → landing on port `3400`
 - **App domain**: `app.geeksy.xyz` → main app on port `3737`
 

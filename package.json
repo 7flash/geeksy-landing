@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "bun run server.ts",
     "start": "bun run server.ts",
+    "dev:bgrun": "bun run scripts/dev-bgrun.ts",
+    "dev:bgrun:dry": "bun run scripts/dev-bgrun.ts --dry-run",
     "typecheck": "bunx tsc --noEmit",
     "test:wheel": "bun test lib/wheel.test.ts",
     "payout:worker": "bun run scripts/payout-worker.ts",
